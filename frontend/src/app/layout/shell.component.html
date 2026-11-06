@@ -1,0 +1,357 @@
+<div class="app-layout">
+  <div class="sidebar-overlay" [class.open]="sidebarOpen()" (click)="closeSidebar()"></div>
+
+  <aside class="sidebar" [class.open]="sidebarOpen()" id="sidebar">
+    <div class="sidebar-logo" style="display: flex; align-items: center; gap: 10px;">
+      <img [src]="companyLogo() || 'assets/images/shape-logo.png'" alt="HRMS Logo" style="max-width: 36px; max-height: 36px; object-fit: contain;" class="small-logo" />
+      @if (companyLogo()) {
+        <span class="big-logo" style="font-weight: 700; font-size: 15px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px;">{{ currentCompanyName() }}</span>
+      } @else {
+        <img src="assets/images/ghost-logo.png" alt="HRMS Logo" style="max-width: 100px" class="big-logo" />
+      }
+    </div>
+
+    <nav class="sidebar-nav" id="sidebarNav">
+      @for (section of nav(); track section.section) {
+        <div class="nav-section">
+          <div class="nav-section-label">{{ section.section }}</div>
+          @for (item of section.items; track item.path + (item.queryParams?.['tab'] || '')) {
+            <div
+              class="nav-item"
+              [class.sub-nav-item]="item.isSubItem"
+              [routerLink]="item.path"
+              [queryParams]="item.queryParams"
+              [routerLinkActiveOptions]="{ exact: !item.queryParams }"
+              routerLinkActive="active"
+              (click)="closeSidebar()"
+            >
+              <span class="nav-icon" [appIcon]="item.icon"></span>
+              <span>{{ item.label }}</span>
+              @if (item.badge) {
+                <span class="nav-badge">{{ item.badge }}</span>
+              }
+            </div>
+          }
+        </div>
+      }
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-user" (click)="logout()">
+        <div class="avatar-placeholder avatar-sm">{{ user()?.initials }}</div>
+        <div class="user-info">
+          <div class="user-name">{{ user()?.name }}</div>
+          <div class="user-role">{{ role() }}</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main-content">
+    <header class="main-header">
+      <div class="header-left">
+        <button class="sidebar-toggle" id="sidebarToggle" (click)="toggleSidebar()" [appIcon]="'menu'"></button>
+        
+        <!-- Company Tenant Badge / Switcher -->
+        <div class="tenant-switcher-wrap" style="position: relative; margin-left: 8px;">
+          <button
+            class="tenant-btn"
+            type="button"
+            (click)="role() === 'Super Admin' ? tenantOpen.update(v => !v) : null; $event.stopPropagation()"
+            [style.cursor]="role() === 'Super Admin' ? 'pointer' : 'default'"
+            style="display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; color: var(--text); font-weight: 700; font-size: 13px;"
+          >
+            <img [src]="companyLogo() || selectedTenant().logo || 'assets/images/shape-logo.png'" alt="Logo" style="width: 20px; height: 20px; object-fit: contain; border-radius: 4px;" />
+            <span>{{ currentCompanyName() }}</span>
+            @if (role() === 'Super Admin') {
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" [style.transform]="tenantOpen() ? 'rotate(180deg)' : ''" style="transition: transform .2s">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            }
+          </button>
+
+          @if (tenantOpen() && role() === 'Super Admin') {
+            <div
+              class="tenant-menu"
+              style="position: absolute; top: calc(100% + 6px); left: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.15); min-width: 230px; padding: 6px; z-index: 1000;"
+              (click)="$event.stopPropagation()"
+            >
+              <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--muted); padding: 6px 10px;">Select Company / Tenant</div>
+              @for (t of tenants(); track t.id) {
+                <div
+                  (click)="selectTenant(t)"
+                  style="display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: background .15s;"
+                  [style.background]="t.id === selectedTenant().id ? 'var(--p-soft)' : 'transparent'"
+                  [style.color]="t.id === selectedTenant().id ? 'var(--p)' : 'var(--text)'"
+                >
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <img [src]="t.logo" alt="" style="width: 18px; height: 18px; object-fit: contain;" />
+                    <div>
+                      <div style="font-weight: 600;">{{ t.name }}</div>
+                      <div style="font-size: 11px; color: var(--muted);">{{ t.location }}</div>
+                    </div>
+                  </div>
+                  @if (t.id === selectedTenant().id) {
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--p)" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+        <div class="header-search">
+          <span [appIcon]="'search'"></span>
+          <input type="text" placeholder="Search..." />
+        </div>
+      </div>
+      <div class="header-right">
+        <div
+          class="header-btn"
+          data-tooltip="Fullscreen"
+          style="cursor: pointer"
+          (click)="toggleFullscreen()"
+          [appIcon]="'expand'"
+        ></div>
+        <div
+          class="header-btn"
+          [attr.data-tooltip]="theme.isDark() ? 'Light Mode' : 'Dark Mode'"
+          style="cursor: pointer"
+          (click)="toggleDark()"
+          [appIcon]="theme.isDark() ? 'sun' : 'moon'"
+        ></div>
+        <div
+          class="header-btn"
+          data-tooltip="Notifications"
+          id="notifBtn"
+          (click)="ui.togglePanel('notif')"
+          style="position: relative"
+        >
+          <span [appIcon]="'bell'"></span>
+          <span class="notif-dot"></span>
+        </div>
+        <div
+          class="header-btn punch-btn"
+          data-tooltip="Punch"
+          id="punchBtn"
+          (click)="ui.togglePanel('punch')"
+          style="position: relative"
+          [appIcon]="'clock'"
+        ></div>
+        <div
+          class="header-avatar"
+          id="avatarBtn"
+          (click)="ui.togglePanel('avatar')"
+          style="cursor: pointer; position: relative"
+        >
+          {{ user()?.initials }}
+        </div>
+      </div>
+    </header>
+
+    <main class="page-content" id="pageContent">
+      <router-outlet />
+    </main>
+  </div>
+</div>
+
+<!-- Notification Panel -->
+<div
+  id="notifPanel"
+  [style.display]="ui.isPanel('notif') ? 'block' : 'none'"
+  style="position: fixed; top: 60px; right: 8px; width: 400px; max-width: calc(100vw - 16px); background: var(--surface); border-radius: 10px; box-shadow: 0 8px 40px rgba(0,0,0,.18); z-index: 9999; border: 1px solid var(--border); overflow: hidden"
+>
+  <div
+    style="padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between"
+  >
+    <div style="font-size: 13px; font-weight: 800; color: var(--text)">Notifications</div>
+    <span
+      style="font-size: 11px; font-weight: 600; background: var(--p); color: #fff; padding: 2px 8px; border-radius: 20px"
+      >{{ unreadCount() }} New</span
+    >
+  </div>
+  <div style="max-height: 360px; overflow-y: auto">
+    @for (n of notifications(); track n.title) {
+      <div
+        style="display: flex; align-items: flex-start; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--border); cursor: pointer; transition: .15s"
+        [style.background]="n.unread ? 'rgba(37,99,235,.06)' : 'var(--surface)'"
+        (click)="markRead(n)"
+      >
+        <div style="font-size: 18px; flex-shrink: 0; margin-top: 1px" [innerHTML]="n.icon | safeHtml"></div>
+        <div style="flex: 1; min-width: 0">
+          <div
+            style="font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 2px; display: flex; align-items: center; gap: 6px"
+          >
+            {{ n.title }}
+            @if (n.unread) {
+              <span
+                style="width: 6px; height: 6px; border-radius: 50%; background: var(--p); display: inline-block; flex-shrink: 0"
+              ></span>
+            }
+          </div>
+          <div style="font-size: 13px; color: var(--muted); line-height: 1.4">{{ n.message }}</div>
+          <div style="font-size: 11px; color: var(--light); margin-top: 3px">{{ n.time }}</div>
+        </div>
+      </div>
+    }
+  </div>
+  <div style="padding: 10px 16px; text-align: center; border-top: 1px solid var(--border)">
+    <button style="font-size: 12px; font-weight: 600; color: var(--p); background: none; border: none; cursor: pointer">
+      View All Notifications
+    </button>
+  </div>
+</div>
+
+<!-- Avatar Dropdown -->
+<div
+  id="avatarMenu"
+  [style.display]="ui.isPanel('avatar') ? 'block' : 'none'"
+  style="position: fixed; top: 60px; right: 8px; width: 200px; background: var(--surface); border-radius: 12px; box-shadow: 0 8px 40px rgba(0,0,0,.18); z-index: 9999; border: 1px solid var(--border); overflow: hidden"
+>
+  <div
+    style="padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px"
+  >
+    <div
+      style="width: 36px; height: 36px; border-radius: 50%; background: var(--p); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; flex-shrink: 0"
+    >
+      {{ user()?.initials }}
+    </div>
+    <div>
+      <div style="font-size: 12px; font-weight: 700; color: var(--text)">{{ user()?.name }}</div>
+      <div style="font-size: 11px; color: var(--muted)">{{ role() }}</div>
+    </div>
+  </div>
+  <div>
+    <div
+      [routerLink]="homePath()"
+      (click)="ui.closePanel()"
+      style="display: flex; align-items: center; gap: 10px; padding: 11px 16px; font-size: 12px; font-weight: 600; color: var(--text); cursor: pointer; transition: .15s"
+    >
+      <span style="display: flex" [appIcon]="'user'"></span>
+      My Account
+    </div>
+    <div
+      (click)="openChangePassword()"
+      style="display: flex; align-items: center; gap: 10px; padding: 11px 16px; font-size: 12px; font-weight: 600; color: var(--text); cursor: pointer; transition: .15s"
+    >
+      <span style="display: flex" [appIcon]="'lock'"></span>
+      Change Password
+    </div>
+    <div style="height: 1px; background: var(--border); margin: 4px 0"></div>
+    <div
+      (click)="logout()"
+      style="display: flex; align-items: center; gap: 10px; padding: 11px 16px; font-size: 12px; font-weight: 600; color: var(--danger); cursor: pointer; transition: .15s"
+    >
+      <span style="display: flex" [appIcon]="'logout'"></span>
+      Log Out
+    </div>
+  </div>
+</div>
+
+<!-- Punch Panel -->
+<div
+  id="punchPanel"
+  [style.display]="ui.isPanel('punch') ? 'block' : 'none'"
+  style="position: fixed; top: 64px; right: 8px; width: 300px; max-width: calc(100vw - 16px); background: var(--surface); border-radius: 10px; box-shadow: 0 8px 40px rgba(0,0,0,.18); z-index: 9999; padding: 20px 16px; border: 1px solid var(--border)"
+>
+  <div style="text-align: center; margin-bottom: 16px">
+    <div
+      style="width: 64px; height: 64px; border-radius: 50%; background: var(--p-soft); color: var(--p); display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; font-size: 1.6rem; font-weight: 800"
+    >
+      {{ user()?.initials }}
+    </div>
+    <div style="font-weight: 800; font-size: 1rem; color: var(--text)">{{ user()?.name }}</div>
+    <div style="font-size: 0.82rem; color: var(--muted)">{{ role() }}</div>
+  </div>
+
+  <div
+    style="display: flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 14px"
+  >
+    <div style="flex: 1; padding: 12px; text-align: center; border-right: 1px solid var(--border)">
+      <div style="font-size: 0.82rem; font-weight: 700; color: var(--p); margin-bottom: 4px">Work Time</div>
+      <div style="font-size: 1.1rem; font-weight: 800; color: var(--text)">{{ punch.workTime() }}</div>
+    </div>
+    <div style="flex: 1; padding: 12px; text-align: center">
+      <div style="font-size: 0.82rem; font-weight: 700; color: var(--muted); margin-bottom: 4px">Break Time</div>
+      <div style="font-size: 1.1rem; font-weight: 800; color: var(--text)">{{ punch.breakTime() }}</div>
+    </div>
+  </div>
+
+  @if (!perms.canCreate('Attendance')) {
+    <div style="background: var(--bg); border: 1px dashed var(--border); border-radius: 8px; padding: 10px; font-size: 12px; color: var(--muted); text-align: center;">
+      Read-only attendance permission (Clocking disabled)
+    </div>
+  } @else if (punch.state() === 'active') {
+    <div style="display: flex; gap: 10px">
+      @if (!punch.onBreak()) {
+        <button
+          (click)="startBreak()"
+          style="flex: 1; padding: 11px 12px; border: 1.5px solid #f59e0b; border-radius: 10px; background: rgba(245, 158, 11, 0.1); color: #d97706; font-weight: 700; font-size: 0.875rem; cursor: pointer; transition: all .15s; display: flex; align-items: center; justify-content: center; gap: 6px;"
+          data-tooltip="Start break with Face Verification"
+        >
+          <span [appIcon]="'clock'"></span>
+          Start Break
+        </button>
+      } @else {
+        <button
+          (click)="endBreak()"
+          style="flex: 1; padding: 11px 12px; border: 1.5px solid #10b981; border-radius: 10px; background: rgba(16, 185, 129, 0.15); color: #059669; font-weight: 700; font-size: 0.875rem; cursor: pointer; transition: all .15s; display: flex; align-items: center; justify-content: center; gap: 6px;"
+          data-tooltip="End break with Face Verification"
+        >
+          <span [appIcon]="'check'"></span>
+          End Break
+        </button>
+      }
+      <button
+        (click)="clockOut()"
+        style="flex: 1; padding: 11px 12px; border: 1.5px solid var(--danger); border-radius: 10px; background: var(--surface); color: var(--danger); font-weight: 700; font-size: 0.875rem; cursor: pointer; transition: all .15s; display: flex; align-items: center; justify-content: center; gap: 6px;"
+        data-tooltip="Clock out with Face Verification"
+      >
+        <span [appIcon]="'x'"></span>
+        Clock Out
+      </button>
+    </div>
+  } @else {
+    <button
+      (click)="clockIn()"
+      style="width: 100%; padding: 12px; border: none; border-radius: 10px; background: var(--p); color: #fff; font-weight: 700; font-size: 0.875rem; cursor: pointer; transition: all .15s; display: flex; align-items: center; justify-content: center; gap: 8px;"
+      data-tooltip="Clock in with Face Verification"
+    >
+      <span [appIcon]="'clock'"></span>
+      Clock In
+    </button>
+  }
+</div>
+
+<!-- Change Password Modal -->
+<div class="modal-overlay" id="chgPwdModal" [class.open]="ui.isOpen('chgPwdModal')" (click)="ui.onOverlayClick($event, 'chgPwdModal')">
+  <div class="modal" style="max-width: 400px">
+    <div class="modal-header">
+      <div style="font-size: 14px; font-weight: 800">Change Password</div>
+      <button class="btn btn-ghost btn-sm" (click)="ui.close('chgPwdModal')" [appIcon]="'x'"></button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Current Password</label>
+        <input class="form-control" type="password" placeholder="Enter current password" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">New Password</label>
+        <input class="form-control" type="password" placeholder="Enter new password" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirm Password</label>
+        <input class="form-control" type="password" placeholder="Confirm new password" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" (click)="ui.close('chgPwdModal')">Cancel</button>
+      <button class="btn btn-primary" (click)="savePassword()">Update Password</button>
+    </div>
+  </div>
+</div>
+
+<!-- Biometric Face Verification Modal for Clock In & Clock Out -->
+@if (punch.showFaceModal()) {
+  <app-face-punch-modal />
+}

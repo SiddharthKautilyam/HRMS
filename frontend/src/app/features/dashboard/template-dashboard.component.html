@@ -1,0 +1,450 @@
+<div class="dash-container">
+  <!-- Top Welcome & KPI Header -->
+  <div class="dash-header-banner">
+    <div class="banner-welcome">
+      <div class="banner-tag">HRMS Portal</div>
+      <h1 class="banner-title">{{ greeting() }}, {{ userName() }}! 👋</h1>
+      <p class="banner-subtitle">Here is the real-time overview of attendance, tasks, notices, and workforce metrics.</p>
+    </div>
+
+    <div class="banner-kpis">
+      <div class="kpi-item">
+        <div class="kpi-label">Headcount</div>
+        <div class="kpi-val">{{ totalHeadcount() }}</div>
+        <div class="kpi-sub positive">Active Staff</div>
+      </div>
+      <div class="kpi-divider"></div>
+      <div class="kpi-item">
+        <div class="kpi-label">Attendance</div>
+        <div class="kpi-val">{{ attendanceRate() }}%</div>
+        <div class="kpi-sub positive">Today's Rate</div>
+      </div>
+      <div class="kpi-divider"></div>
+      <div class="kpi-item">
+        <div class="kpi-label">On Leave</div>
+        <div class="kpi-val">{{ onLeaveToday().length }}</div>
+        <div class="kpi-sub text-amber-500">Approved</div>
+      </div>
+      <div class="kpi-divider"></div>
+      <div class="kpi-item">
+        <div class="kpi-label">Pending Action</div>
+        <div class="kpi-val">{{ pendingApprovals().length + myTasks().length }}</div>
+        <div class="kpi-sub text-blue-400">Approvals & Tasks</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Real-Time Punch Clock (for users linked to an employee record) -->
+  @if (session.user()?.employeeId) {
+    <app-employee-punch-widget />
+  }
+
+  <!-- Main Multi-Widget Layout (Dual Column) -->
+  <div class="dash-grid">
+    <!-- LEFT COLUMN (Widgets from Old HRMS) -->
+    <div class="dash-left-col">
+      <!-- 1. Notice Board Banner / Carousel -->
+      @if (notices().length > 0) {
+        <div class="dash-widget notice-widget">
+          <div class="widget-header">
+            <div class="header-left">
+              <span class="widget-indicator"></span>
+              <h3>Notice Board</h3>
+              <span class="badge badge-info">{{ currentNoticeIndex() + 1 }} of {{ notices().length }}</span>
+            </div>
+            <div class="header-actions">
+              <button class="nav-btn" (click)="prevNotice()" title="Previous notice">‹</button>
+              <button class="nav-btn" (click)="nextNotice()" title="Next notice">›</button>
+              <a routerLink="/announcements" class="view-link">View All</a>
+            </div>
+          </div>
+
+          @if (currentNotice(); as notice) {
+            <div class="notice-card" [class]="'severity-' + notice.severity.toLowerCase()">
+              <div class="notice-meta">
+                <span class="tag-pill">{{ notice.tag }}</span>
+                <span class="date-label">{{ notice.publishedAtUtc | date:'mediumDate' }}</span>
+              </div>
+              <h4 class="notice-title">{{ notice.title }}</h4>
+              <p class="notice-msg">{{ notice.message }}</p>
+            </div>
+          }
+        </div>
+      }
+
+      <!-- 2. Attendance Graph & Weekly Trend -->
+      @if (perms.hasModuleAccess('Attendance') && attendanceGraph().length > 0) {
+        <div class="dash-widget">
+          <div class="widget-header">
+            <div class="header-left">
+              <span class="widget-indicator"></span>
+              <h3>Attendance Overview</h3>
+            </div>
+            <div class="header-actions">
+              <a routerLink="/attendance" class="view-link">Detailed Log ›</a>
+            </div>
+          </div>
+
+          <div class="attendance-graph-content">
+            <div class="graph-legend">
+              <span class="legend-item"><span class="dot dot-present"></span> Present</span>
+              <span class="legend-item"><span class="dot dot-late"></span> Late</span>
+              <span class="legend-item"><span class="dot dot-absent"></span> Absent</span>
+            </div>
+
+            <div class="graph-bars">
+              @for (bar of attendanceGraph(); track bar.label) {
+                <div class="bar-col">
+                  <div class="bar-stack">
+                    <div class="seg seg-present" [style.height.%]="bar.present * 3" [title]="'Present: ' + bar.present"></div>
+                    <div class="seg seg-late" [style.height.%]="bar.late * 4" [title]="'Late: ' + bar.late"></div>
+                    <div class="seg seg-absent" [style.height.%]="bar.absent * 4" [title]="'Absent: ' + bar.absent"></div>
+                  </div>
+                  <span class="bar-label">{{ bar.label }}</span>
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+      }
+
+      <!-- 3. Absent Today & On Leave Today Row -->
+      @if ((perms.hasModuleAccess('Attendance') || perms.hasModuleAccess('Leave')) && (absentToday().length > 0 || onLeaveToday().length > 0)) {
+        <div class="widget-dual-row">
+          <!-- Absent Today -->
+          @if (absentToday().length > 0) {
+            <div class="dash-widget compact-widget">
+              <div class="widget-header">
+                <div class="header-left">
+                  <span class="widget-indicator red"></span>
+                  <h3>Absent Today</h3>
+                  <span class="count-pill red">{{ absentToday().length }}</span>
+                </div>
+              </div>
+              <div class="widget-list">
+                @for (emp of absentToday(); track emp.employeeId) {
+                  <div class="person-row">
+                    <div class="person-avatar red">{{ getInitials(emp.employeeName) }}</div>
+                    <div class="person-info">
+                      <div class="person-name">{{ emp.employeeName }}</div>
+                      <div class="person-sub">{{ emp.employeeCode }} · {{ emp.department }}</div>
+                    </div>
+                    <span class="status-pill status-absent">Unplanned</span>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+
+          <!-- On Leave Today -->
+          @if (onLeaveToday().length > 0) {
+            <div class="dash-widget compact-widget">
+              <div class="widget-header">
+                <div class="header-left">
+                  <span class="widget-indicator amber"></span>
+                  <h3>On Leave Today</h3>
+                  <span class="count-pill amber">{{ onLeaveToday().length }}</span>
+                </div>
+              </div>
+              <div class="widget-list">
+                @for (emp of onLeaveToday(); track emp.employeeId) {
+                  <div class="person-row">
+                    <div class="person-avatar amber">{{ getInitials(emp.employeeName) }}</div>
+                    <div class="person-info">
+                      <div class="person-name">{{ emp.employeeName }}</div>
+                      <div class="person-sub">{{ emp.leaveReason || 'Approved Leave' }}</div>
+                    </div>
+                    <span class="status-pill status-leave">On Leave</span>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      }
+
+      <!-- 4. Celebrations (Birthdays, Work Anniversaries, New Joinees) -->
+      @if (celebrations().length > 0) {
+        <div class="dash-widget">
+          <div class="widget-header">
+            <div class="header-left">
+              <span class="widget-indicator purple"></span>
+              <h3>Workforce Highlights</h3>
+            </div>
+            <div class="tab-pills">
+              <button class="tab-btn" [class.active]="activeCelebrationTab() === 'Birthday'" (click)="activeCelebrationTab.set('Birthday')">
+                🎂 Birthdays
+              </button>
+              <button class="tab-btn" [class.active]="activeCelebrationTab() === 'WorkAnniversary'" (click)="activeCelebrationTab.set('WorkAnniversary')">
+                🎖️ Anniversaries
+              </button>
+              <button class="tab-btn" [class.active]="activeCelebrationTab() === 'NewJoinee'" (click)="activeCelebrationTab.set('NewJoinee')">
+                👋 New Joinees
+              </button>
+            </div>
+          </div>
+
+          <div class="celebration-cards-grid">
+            @for (c of filteredCelebrations(); track c.employeeId + c.dateLabel) {
+              <div class="celebration-card">
+                <div class="celeb-avatar">{{ getInitials(c.employeeName) }}</div>
+                <div class="celeb-details">
+                  <div class="celeb-name">{{ c.employeeName }}</div>
+                  <div class="celeb-dept">{{ c.department }}</div>
+                  <div class="celeb-badge">{{ c.dateLabel }}</div>
+                </div>
+              </div>
+            } @empty {
+              <div class="empty-state full-width">No {{ activeCelebrationTab() }}s in this period.</div>
+            }
+          </div>
+        </div>
+      }
+
+      <!-- 5. My Tasks & Requests for Approval Row -->
+      @if (myTasks().length > 0 || (pendingApprovals().length > 0 && perms.hasModuleAccess('Approvals'))) {
+        <div class="widget-dual-row">
+          <!-- My Tasks -->
+          @if (myTasks().length > 0) {
+            <div class="dash-widget compact-widget">
+              <div class="widget-header">
+                <div class="header-left">
+                  <span class="widget-indicator blue"></span>
+                  <h3>My Tasks</h3>
+                  <span class="count-pill blue">{{ myTasks().length }}</span>
+                </div>
+              </div>
+              <div class="task-list">
+                @for (task of myTasks(); track task.id) {
+                  <div class="task-row" [class.completed]="task.status === 'Completed'">
+                    <input type="checkbox" [checked]="task.status === 'Completed'" (change)="toggleTask(task)" />
+                    <div class="task-body">
+                      <div class="task-title">{{ task.title }}</div>
+                      <div class="task-meta">Due: {{ task.dueDate }} · <span class="priority-pill" [class]="'priority-' + task.priority.toLowerCase()">{{ task.priority }}</span></div>
+                    </div>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+
+          <!-- Requests for Approval -->
+          @if (pendingApprovals().length > 0 && perms.hasModuleAccess('Approvals')) {
+            <div class="dash-widget compact-widget">
+              <div class="widget-header">
+                <div class="header-left">
+                  <span class="widget-indicator teal"></span>
+                  <h3>Pending Approvals</h3>
+                  <span class="count-pill teal">{{ pendingApprovals().length }}</span>
+                </div>
+                <a routerLink="/approvals" class="view-link">View All</a>
+              </div>
+              <div class="approvals-list">
+                @for (req of pendingApprovals(); track req.id) {
+                  <div class="approval-card">
+                    <div class="approval-main">
+                      <div class="req-title">{{ req.type }}</div>
+                      <div class="req-details">{{ req.employeeName }} · {{ req.detail }}</div>
+                    </div>
+                    <div class="approval-actions">
+                      <button class="btn-action btn-approve" (click)="approveRequest(req.id)" title="Approve">✓</button>
+                      <button class="btn-action btn-reject" (click)="rejectRequest(req.id)" title="Reject">✕</button>
+                    </div>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </div>
+
+    <!-- RIGHT COLUMN (Punch & Personal Widgets from Old HRMS) -->
+    <div class="dash-right-col">
+      <!-- 1. Check-In / Check-Out Tracker -->
+      @if (perms.hasModuleAccess('Attendance')) {
+        <div class="dash-widget punch-widget">
+          <div class="punch-header">
+            <div class="punch-date">{{ currentTime() | date:'EEEE, MMM d, y' }}</div>
+            <div class="punch-live-clock">{{ currentTime() | date:'hh:mm:ss a' }}</div>
+          </div>
+
+          <div class="punch-status-badge" [class.active]="punchService.state() === 'active'" [class.on-break]="punchService.onBreak()">
+            <span class="status-dot"></span>
+            @if (punchService.state() === 'active') {
+              {{ punchService.onBreak() ? 'Currently On Break' : 'Clocked In · Working' }}
+            } @else {
+              Clocked Out
+            }
+          </div>
+
+          <div class="punch-timers">
+            <div class="timer-box">
+              <div class="timer-label">Production Time</div>
+              <div class="timer-value">{{ punchService.workTime() }}</div>
+            </div>
+            <div class="timer-box">
+              <div class="timer-label">Break Time</div>
+              <div class="timer-value break">{{ punchService.breakTime() }}</div>
+            </div>
+          </div>
+
+          <div class="punch-buttons">
+            @if (!perms.canCreate('Attendance')) {
+              <div style="background: var(--bg); border: 1px dashed var(--border); border-radius: 8px; padding: 10px; font-size: 12px; color: var(--muted); text-align: center;">
+                Read-only attendance permission (Clocking disabled)
+              </div>
+            } @else if (punchService.state() === 'idle') {
+              <button class="btn-punch btn-clockin" (click)="clockIn()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                Clock In
+              </button>
+            } @else {
+              <button class="btn-punch btn-clockout" (click)="clockOut()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                Clock Out
+              </button>
+              <button class="btn-punch btn-break" [class.active]="punchService.onBreak()" (click)="toggleBreak()">
+                {{ punchService.onBreak() ? 'End Break' : 'Take Break' }}
+              </button>
+            }
+          </div>
+
+          <!-- Today's Punch History Timeline -->
+          <div class="punch-history">
+            <div class="history-title">Today's Activity</div>
+            <div class="history-timeline">
+              @for (p of punchService.todayPunches(); track p.id) {
+                <div class="timeline-entry">
+                  <span class="timeline-dot" [class]="'type-' + p.punchType.toLowerCase()"></span>
+                  <span class="timeline-time">{{ p.punchTime | date:'hh:mm a' }}</span>
+                  <span class="timeline-type">{{ p.punchType }}</span>
+                </div>
+              } @empty {
+                <div class="timeline-empty">No punch activity recorded today.</div>
+              }
+            </div>
+          </div>
+        </div>
+      }
+
+      <!-- 2. Upcoming Holidays -->
+      @if ((perms.hasModuleAccess('Company') || perms.hasModuleAccess('Attendance')) && upcomingHolidays().length > 0) {
+        <div class="dash-widget">
+          <div class="widget-header">
+            <div class="header-left">
+              <span class="widget-indicator orange"></span>
+              <h3>Upcoming Holidays</h3>
+            </div>
+            <a routerLink="/attendance" class="view-link">Calendar</a>
+          </div>
+
+          <div class="holiday-list">
+            @for (h of upcomingHolidays(); track h.id) {
+              <div class="holiday-card">
+                <div class="holiday-date-badge">
+                  <span class="month">{{ h.date | date:'MMM' }}</span>
+                  <span class="day">{{ h.date | date:'d' }}</span>
+                </div>
+                <div class="holiday-details">
+                  <div class="holiday-name">{{ h.name }}</div>
+                  <div class="holiday-sub">{{ h.dayLabel }} · {{ h.type }}</div>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      <!-- 3. My Leave Balances -->
+      @if (perms.hasModuleAccess('Leave') && leaveBalances().length > 0) {
+        <div class="dash-widget">
+          <div class="widget-header">
+            <div class="header-left">
+              <span class="widget-indicator green"></span>
+              <h3>My Leave Balances</h3>
+            </div>
+            <a routerLink="/leave" class="view-link">Apply</a>
+          </div>
+
+          <div class="leave-quota-list">
+            @for (b of leaveBalances(); track b.type) {
+              <div class="quota-item">
+                <div class="quota-header">
+                  <span class="quota-name">{{ b.type }}</span>
+                  <span class="quota-count">{{ b.balance }} / {{ b.total }} Days Left</span>
+                </div>
+                <div class="quota-bar-track">
+                  <div class="quota-bar-fill" [style.background]="b.color" [style.width.%]="(b.balance / (b.total || 1)) * 100"></div>
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+      }
+
+      <!-- 4. Quick Shortcuts -->
+      <div class="dash-widget">
+        <div class="widget-header">
+          <div class="header-left">
+            <span class="widget-indicator cyan"></span>
+            <h3>Quick Actions</h3>
+          </div>
+        </div>
+
+        <div class="quick-links-grid">
+          @if (perms.hasModuleAccess('Leave')) {
+            <a routerLink="/leave" class="quick-link-btn">
+              <span class="link-icon">🏖️</span>
+              <span>Apply Leave</span>
+            </a>
+          }
+          @if (perms.hasModuleAccess('Attendance')) {
+            <a routerLink="/attendance" class="quick-link-btn">
+              <span class="link-icon">⏱️</span>
+              <span>Regularization</span>
+            </a>
+          }
+          @if (perms.hasModuleAccess('Shift')) {
+            <a routerLink="/roster" class="quick-link-btn">
+              <span class="link-icon">📅</span>
+              <span>Shift Roster</span>
+            </a>
+          }
+          @if (perms.hasModuleAccess('Payslips') || perms.hasModuleAccess('Payroll')) {
+            <a routerLink="/payslips" class="quick-link-btn">
+              <span class="link-icon">💳</span>
+              <span>View Payslip</span>
+            </a>
+          }
+          @if (perms.hasModuleAccess('Settings')) {
+            <a routerLink="/settings" [queryParams]="{ tab: 'keygroup' }" class="quick-link-btn">
+              <span class="link-icon">⚙️</span>
+              <span>Key Groups</span>
+            </a>
+            <a routerLink="/settings" [queryParams]="{ tab: 'role' }" class="quick-link-btn">
+              <span class="link-icon">🔐</span>
+              <span>Roles &amp; RBAC</span>
+            </a>
+          }
+          <a routerLink="/kiosk" class="quick-link-btn">
+            <span class="link-icon">📷</span>
+            <span>Face Kiosk</span>
+          </a>
+          @if (perms.hasModuleAccess('Payroll')) {
+            <a routerLink="/loans" class="quick-link-btn">
+              <span class="link-icon">💰</span>
+              <span>Loans</span>
+            </a>
+          }
+          @if (perms.hasModuleAccess('Employees')) {
+            <a routerLink="/employees" class="quick-link-btn">
+              <span class="link-icon">👥</span>
+              <span>Directory</span>
+            </a>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

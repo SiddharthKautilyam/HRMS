@@ -1,0 +1,620 @@
+/* ============================================================
+   HRMS — Global Animation System
+   Covers: page-load, scroll-reveal, hover, stagger, counters
+   ============================================================ */
+
+/* ── 1. Keyframes ─────────────────────────────────────────── */
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeDown {
+  from { opacity: 0; transform: translateY(-24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeLeft {
+  from { opacity: 0; transform: translateX(32px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes fadeRight {
+  from { opacity: 0; transform: translateX(-32px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes zoomIn {
+  from { opacity: 0; transform: scale(0.88); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes zoomInRotate {
+  from { opacity: 0; transform: scale(0.7) rotate(-6deg); }
+  to   { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+@keyframes flipUp {
+  from { opacity: 0; transform: perspective(600px) rotateX(20deg) translateY(20px); }
+  to   { opacity: 1; transform: perspective(600px) rotateX(0deg) translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(40px) scaleY(0.95); }
+  to   { opacity: 1; transform: translateY(0) scaleY(1); }
+}
+
+@keyframes bounceIn {
+  0%   { opacity: 0; transform: scale(0.6); }
+  60%  { opacity: 1; transform: scale(1.08); }
+  80%  { transform: scale(0.97); }
+  100% { transform: scale(1); }
+}
+
+@keyframes popIn {
+  0%   { opacity: 0; transform: scale(0.75) translateY(12px); }
+  70%  { transform: scale(1.04) translateY(-2px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes shimmerSlide {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(37,99,235,0); }
+  50%       { box-shadow: 0 0 0 6px rgba(37,99,235,0.15); }
+}
+
+@keyframes spinOnce {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes progressFill {
+  from { width: 0 !important; }
+}
+
+@keyframes barGrow {
+  from { transform: scaleY(0); transform-origin: bottom; }
+  to   { transform: scaleY(1); transform-origin: bottom; }
+}
+
+@keyframes pageEnter {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes headerSlide {
+  from { opacity: 0; transform: translateY(-100%); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes sidebarSlide {
+  from { opacity: 0; transform: translateX(-20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes navItemIn {
+  from { opacity: 0; transform: translateX(-12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes tilePop {
+  from { opacity: 0; transform: scale(0.82) translateY(16px); }
+  60%  { transform: scale(1.03) translateY(-2px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes bannerReveal {
+  from { opacity: 0; transform: translateY(-16px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes kpiReveal {
+  from { opacity: 0; transform: translateY(20px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes cardReveal {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes tableRowIn {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes badgePop {
+  0%   { transform: scale(0); }
+  70%  { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+@keyframes iconSpin {
+  from { transform: rotate(0deg) scale(0.5); opacity: 0; }
+  to   { transform: rotate(360deg) scale(1); opacity: 1; }
+}
+
+@keyframes waveFloat {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-6px); }
+}
+
+@keyframes dotPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%       { transform: scale(1.6); opacity: 0.5; }
+}
+
+/* ── 2. Utility Animation Classes ─────────────────────────── */
+
+.anim-fade-in       { animation: fadeIn       0.4s ease both; }
+.anim-fade-up       { animation: fadeUp       0.5s cubic-bezier(.22,.68,0,1.2) both; }
+.anim-fade-down     { animation: fadeDown     0.45s ease both; }
+.anim-fade-left     { animation: fadeLeft     0.45s ease both; }
+.anim-fade-right    { animation: fadeRight    0.45s ease both; }
+.anim-zoom-in       { animation: zoomIn       0.4s cubic-bezier(.22,.68,0,1.2) both; }
+.anim-zoom-rotate   { animation: zoomInRotate 0.5s cubic-bezier(.22,.68,0,1.2) both; }
+.anim-flip-up       { animation: flipUp       0.5s ease both; }
+.anim-slide-up      { animation: slideUp      0.45s ease both; }
+.anim-bounce-in     { animation: bounceIn     0.6s ease both; }
+.anim-pop-in        { animation: popIn        0.45s cubic-bezier(.22,.68,0,1.2) both; }
+
+/* ── 3. Stagger Delays ────────────────────────────────────── */
+
+.d-0  { animation-delay: 0ms !important; }
+.d-1  { animation-delay: 60ms !important; }
+.d-2  { animation-delay: 120ms !important; }
+.d-3  { animation-delay: 180ms !important; }
+.d-4  { animation-delay: 240ms !important; }
+.d-5  { animation-delay: 300ms !important; }
+.d-6  { animation-delay: 360ms !important; }
+.d-7  { animation-delay: 420ms !important; }
+.d-8  { animation-delay: 480ms !important; }
+.d-9  { animation-delay: 540ms !important; }
+.d-10 { animation-delay: 600ms !important; }
+.d-11 { animation-delay: 660ms !important; }
+.d-12 { animation-delay: 720ms !important; }
+
+/* ── 4. Scroll-Reveal Base State ──────────────────────────── */
+
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.55s cubic-bezier(.22,.68,0,1.1),
+              transform 0.55s cubic-bezier(.22,.68,0,1.1);
+  will-change: opacity, transform;
+}
+.reveal.reveal-left {
+  transform: translateX(32px);
+}
+.reveal.reveal-right {
+  transform: translateX(-32px);
+}
+.reveal.reveal-zoom {
+  transform: scale(0.9);
+}
+.reveal.reveal-flip {
+  transform: perspective(600px) rotateX(15deg) translateY(16px);
+}
+.reveal.visible {
+  opacity: 1;
+  transform: none !important;
+}
+
+/* Stagger for reveal children */
+.reveal-group > *:nth-child(1)  { transition-delay: 0ms; }
+.reveal-group > *:nth-child(2)  { transition-delay: 70ms; }
+.reveal-group > *:nth-child(3)  { transition-delay: 140ms; }
+.reveal-group > *:nth-child(4)  { transition-delay: 210ms; }
+.reveal-group > *:nth-child(5)  { transition-delay: 280ms; }
+.reveal-group > *:nth-child(6)  { transition-delay: 350ms; }
+.reveal-group > *:nth-child(7)  { transition-delay: 420ms; }
+.reveal-group > *:nth-child(8)  { transition-delay: 490ms; }
+
+/* ── 5. Page-Level Enter Animation ────────────────────────── */
+
+.page-content {
+  animation: pageEnter 0.45s cubic-bezier(.22,.68,0,1.1) both;
+}
+
+/* Header slides down */
+.main-header {
+  animation: headerSlide 0.35s ease both;
+}
+
+/* Sidebar nav items stagger in */
+.sidebar-nav .nav-item {
+  animation: navItemIn 0.35s ease both;
+}
+.sidebar-nav .nav-item:nth-child(1)  { animation-delay: 40ms; }
+.sidebar-nav .nav-item:nth-child(2)  { animation-delay: 80ms; }
+.sidebar-nav .nav-item:nth-child(3)  { animation-delay: 120ms; }
+.sidebar-nav .nav-item:nth-child(4)  { animation-delay: 160ms; }
+.sidebar-nav .nav-item:nth-child(5)  { animation-delay: 200ms; }
+.sidebar-nav .nav-item:nth-child(6)  { animation-delay: 240ms; }
+.sidebar-nav .nav-item:nth-child(7)  { animation-delay: 280ms; }
+.sidebar-nav .nav-item:nth-child(8)  { animation-delay: 320ms; }
+.sidebar-nav .nav-item:nth-child(9)  { animation-delay: 360ms; }
+.sidebar-nav .nav-item:nth-child(10) { animation-delay: 400ms; }
+.sidebar-nav .nav-item:nth-child(11) { animation-delay: 440ms; }
+.sidebar-nav .nav-item:nth-child(12) { animation-delay: 480ms; }
+
+/* ── 6. Hero Banner ───────────────────────────────────────── */
+
+.hero-banner {
+  animation: bannerReveal 0.5s cubic-bezier(.22,.68,0,1.1) both;
+}
+
+/* ── 7. KPI Cards ─────────────────────────────────────────── */
+
+.kpi-new,
+.kpi-card {
+  animation: kpiReveal 0.5s cubic-bezier(.22,.68,0,1.2) both;
+}
+.grid-4 > .kpi-new:nth-child(1),
+.grid-4 > .kpi-card:nth-child(1) { animation-delay: 80ms; }
+.grid-4 > .kpi-new:nth-child(2),
+.grid-4 > .kpi-card:nth-child(2) { animation-delay: 160ms; }
+.grid-4 > .kpi-new:nth-child(3),
+.grid-4 > .kpi-card:nth-child(3) { animation-delay: 240ms; }
+.grid-4 > .kpi-new:nth-child(4),
+.grid-4 > .kpi-card:nth-child(4) { animation-delay: 320ms; }
+
+/* ── 8. Cards ─────────────────────────────────────────────── */
+
+.card {
+  animation: cardReveal 0.5s cubic-bezier(.22,.68,0,1.1) both;
+}
+.grid-2 > .card:nth-child(1) { animation-delay: 200ms; }
+.grid-2 > .card:nth-child(2) { animation-delay: 300ms; }
+.grid-3 > .card:nth-child(1) { animation-delay: 150ms; }
+.grid-3 > .card:nth-child(2) { animation-delay: 230ms; }
+.grid-3 > .card:nth-child(3) { animation-delay: 310ms; }
+
+/* Standalone cards (not in grid) */
+.card:not(.grid-2 > .card):not(.grid-3 > .card):not(.grid-4 > .card) {
+  animation-delay: 350ms;
+}
+
+/* ── 9. Sitecore Tile Dashboard ───────────────────────────── */
+
+.sc-section {
+  animation: cardReveal 0.5s cubic-bezier(.22,.68,0,1.1) both;
+}
+.sc-wrap > .sc-section:nth-child(1) { animation-delay: 100ms; }
+.sc-wrap > .sc-section:nth-child(2) { animation-delay: 180ms; }
+.sc-wrap > .sc-section:nth-child(3) { animation-delay: 260ms; }
+.sc-wrap > .sc-section:nth-child(4) { animation-delay: 340ms; }
+.sc-wrap > .sc-section:nth-child(5) { animation-delay: 420ms; }
+.sc-wrap > .sc-section:nth-child(6) { animation-delay: 500ms; }
+
+.sc-tile {
+  animation: tilePop 0.5s cubic-bezier(.22,.68,0,1.2) both;
+}
+.sc-tiles > .sc-tile:nth-child(1) { animation-delay: 150ms; }
+.sc-tiles > .sc-tile:nth-child(2) { animation-delay: 210ms; }
+.sc-tiles > .sc-tile:nth-child(3) { animation-delay: 270ms; }
+.sc-tiles > .sc-tile:nth-child(4) { animation-delay: 330ms; }
+.sc-tiles > .sc-tile:nth-child(5) { animation-delay: 390ms; }
+.sc-tiles > .sc-tile:nth-child(6) { animation-delay: 450ms; }
+.sc-tiles > .sc-tile:nth-child(7) { animation-delay: 510ms; }
+.sc-tiles > .sc-tile:nth-child(8) { animation-delay: 570ms; }
+
+.sc-tile-icon {
+  animation: iconSpin 0.6s cubic-bezier(.22,.68,0,1.2) both;
+  animation-delay: inherit;
+}
+
+/* ── 10. Table Rows ───────────────────────────────────────── */
+
+tbody tr {
+  animation: tableRowIn 0.35s ease both;
+}
+tbody tr:nth-child(1)  { animation-delay: 50ms; }
+tbody tr:nth-child(2)  { animation-delay: 100ms; }
+tbody tr:nth-child(3)  { animation-delay: 150ms; }
+tbody tr:nth-child(4)  { animation-delay: 200ms; }
+tbody tr:nth-child(5)  { animation-delay: 250ms; }
+tbody tr:nth-child(6)  { animation-delay: 300ms; }
+tbody tr:nth-child(7)  { animation-delay: 350ms; }
+tbody tr:nth-child(8)  { animation-delay: 400ms; }
+tbody tr:nth-child(9)  { animation-delay: 450ms; }
+tbody tr:nth-child(10) { animation-delay: 500ms; }
+
+/* ── 11. Badges ───────────────────────────────────────────── */
+
+.badge {
+  animation: badgePop 0.4s cubic-bezier(.22,.68,0,1.4) both;
+  animation-delay: 400ms;
+}
+
+/* ── 12. Progress Bars ────────────────────────────────────── */
+
+.progress-bar {
+  animation: progressFill 1.2s cubic-bezier(.22,.68,0,1.1) both;
+  animation-delay: 500ms;
+}
+
+/* ── 13. Hover Micro-interactions ─────────────────────────── */
+
+/* Cards lift */
+.card {
+  transition: transform 0.22s cubic-bezier(.22,.68,0,1.2),
+              box-shadow 0.22s ease !important;
+}
+.card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 28px rgba(37,99,235,0.10) !important;
+}
+
+/* KPI cards */
+.kpi-new,
+.kpi-card {
+  transition: transform 0.22s cubic-bezier(.22,.68,0,1.2),
+              box-shadow 0.22s ease !important;
+}
+.kpi-new:hover,
+.kpi-card:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: 0 10px 32px rgba(37,99,235,0.13) !important;
+}
+
+/* KPI icon spin on card hover */
+.kpi-new:hover .kn-icon svg,
+.kpi-card:hover .kpi-icon svg {
+  animation: spinOnce 0.5s ease;
+}
+
+/* Tile hover */
+.sc-tile {
+  transition: transform 0.22s cubic-bezier(.22,.68,0,1.2),
+              box-shadow 0.22s ease,
+              border-color 0.18s ease !important;
+}
+.sc-tile:hover {
+  transform: translateY(-5px) scale(1.03) !important;
+  box-shadow: 0 12px 32px rgba(37,99,235,0.15) !important;
+}
+.sc-tile:hover .sc-tile-icon {
+  animation: waveFloat 0.8s ease infinite;
+}
+
+/* Nav items */
+.nav-item {
+  transition: background 0.15s ease, color 0.15s ease,
+              transform 0.15s ease !important;
+}
+.nav-item:hover {
+  transform: translateX(2px);
+}
+
+/* Buttons */
+.btn {
+  transition: transform 0.15s ease, box-shadow 0.15s ease,
+              background 0.15s ease, border-color 0.15s ease,
+              color 0.15s ease !important;
+}
+.btn:hover {
+  transform: translateY(-1px);
+}
+.btn:active {
+  transform: translateY(0) scale(0.97);
+}
+.btn-primary:hover {
+  box-shadow: 0 4px 14px rgba(37,99,235,0.35);
+}
+
+/* Table rows */
+tbody tr {
+  transition: background 0.15s ease, transform 0.15s ease !important;
+}
+tbody tr:hover {
+  transform: translateX(2px);
+}
+
+/* Avatar placeholder */
+.avatar-placeholder {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.avatar-placeholder:hover {
+  transform: scale(1.12);
+  box-shadow: 0 4px 12px rgba(37,99,235,0.2);
+}
+
+/* Status dot pulse */
+.hero-status::before {
+  animation: dotPulse 2s ease-in-out infinite;
+}
+
+/* ── 14. Modal Animation ──────────────────────────────────── */
+
+.modal-overlay {
+  transition: opacity 0.25s ease !important;
+}
+.modal {
+  transition: transform 0.3s cubic-bezier(.22,.68,0,1.2),
+              opacity 0.25s ease !important;
+}
+.modal-overlay.open .modal {
+  animation: popIn 0.35s cubic-bezier(.22,.68,0,1.2) both;
+}
+
+/* ── 15. Sidebar Open Animation (mobile) ──────────────────── */
+
+.sidebar.open .nav-item {
+  animation: fadeRight 0.3s ease both;
+}
+.sidebar.open .nav-item:nth-child(1)  { animation-delay: 50ms; }
+.sidebar.open .nav-item:nth-child(2)  { animation-delay: 90ms; }
+.sidebar.open .nav-item:nth-child(3)  { animation-delay: 130ms; }
+.sidebar.open .nav-item:nth-child(4)  { animation-delay: 170ms; }
+.sidebar.open .nav-item:nth-child(5)  { animation-delay: 210ms; }
+.sidebar.open .nav-item:nth-child(6)  { animation-delay: 250ms; }
+.sidebar.open .nav-item:nth-child(7)  { animation-delay: 290ms; }
+.sidebar.open .nav-item:nth-child(8)  { animation-delay: 330ms; }
+.sidebar.open .nav-item:nth-child(9)  { animation-delay: 370ms; }
+.sidebar.open .nav-item:nth-child(10) { animation-delay: 410ms; }
+
+/* ── 16. Notification / Dropdown Panels ───────────────────── */
+
+#notifPanel,
+#avatarMenu,
+#punchPanel {
+  animation: fadeDown 0.25s cubic-bezier(.22,.68,0,1.2) both;
+  transform-origin: top right;
+}
+
+/* ── 17. Toast ────────────────────────────────────────────── */
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(20px) scale(0.9); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes toastOut {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(10px) scale(0.9); }
+}
+
+/* ── 18. Login Page ───────────────────────────────────────── */
+
+.wrap {
+  animation: zoomIn 0.5s cubic-bezier(.22,.68,0,1.2) both;
+}
+.left .logo    { animation: fadeDown 0.4s ease both 0.1s; }
+.left h1       { animation: fadeUp   0.4s ease both 0.2s; }
+.left .sub     { animation: fadeUp   0.4s ease both 0.28s; }
+.left .roles   { animation: fadeUp   0.4s ease both 0.36s; }
+.left .fg:nth-child(1) { animation: fadeRight 0.4s ease both 0.44s; }
+.left .fg:nth-child(2) { animation: fadeRight 0.4s ease both 0.52s; }
+.left .row     { animation: fadeUp   0.35s ease both 0.58s; }
+.left .btn-main { animation: fadeUp  0.4s ease both 0.64s; }
+.left .or      { animation: fadeIn   0.3s ease both 0.72s; }
+.left .btn-google { animation: fadeUp 0.35s ease both 0.78s; }
+.left .signup  { animation: fadeIn   0.3s ease both 0.84s; }
+
+/* ── 19. Sparkbar Grow ────────────────────────────────────── */
+
+.sparkbar span {
+  animation: barGrow 0.8s cubic-bezier(.22,.68,0,1.1) both;
+}
+.sparkbar span:nth-child(1) { animation-delay: 400ms; }
+.sparkbar span:nth-child(2) { animation-delay: 450ms; }
+.sparkbar span:nth-child(3) { animation-delay: 500ms; }
+.sparkbar span:nth-child(4) { animation-delay: 550ms; }
+.sparkbar span:nth-child(5) { animation-delay: 600ms; }
+.sparkbar span:nth-child(6) { animation-delay: 650ms; }
+.sparkbar span:nth-child(7) { animation-delay: 700ms; }
+
+/* ── 20. Approval / List Rows ─────────────────────────────── */
+
+.appr-row,
+.appr-row-hr {
+  animation: fadeRight 0.35s ease both;
+}
+.appr-row:nth-child(1),
+.appr-row-hr:nth-child(1) { animation-delay: 200ms; }
+.appr-row:nth-child(2),
+.appr-row-hr:nth-child(2) { animation-delay: 270ms; }
+.appr-row:nth-child(3),
+.appr-row-hr:nth-child(3) { animation-delay: 340ms; }
+.appr-row:nth-child(4),
+.appr-row-hr:nth-child(4) { animation-delay: 410ms; }
+
+/* ── 21. Announcement Cards ───────────────────────────────── */
+
+.ann-card {
+  animation: fadeRight 0.4s ease both;
+}
+.ann-card:nth-child(1) { animation-delay: 200ms; }
+.ann-card:nth-child(2) { animation-delay: 270ms; }
+.ann-card:nth-child(3) { animation-delay: 340ms; }
+.ann-card:nth-child(4) { animation-delay: 410ms; }
+
+/* ── 22. Leave Balance Tiles ──────────────────────────────── */
+
+.leave-bal {
+  animation: popIn 0.45s cubic-bezier(.22,.68,0,1.2) both;
+  transition: transform 0.2s ease, box-shadow 0.2s ease,
+              border-color 0.2s ease !important;
+}
+.leave-bal:nth-child(1) { animation-delay: 200ms; }
+.leave-bal:nth-child(2) { animation-delay: 270ms; }
+.leave-bal:nth-child(3) { animation-delay: 340ms; }
+.leave-bal:nth-child(4) { animation-delay: 410ms; }
+.leave-bal:hover {
+  transform: translateY(-3px) scale(1.02);
+  box-shadow: 0 6px 20px rgba(37,99,235,0.12);
+}
+
+/* ── 23. Page Header Row ──────────────────────────────────── */
+
+.page-header-row {
+  animation: fadeDown 0.4s ease both 0.05s;
+}
+
+/* ── 24. Filter Bar ───────────────────────────────────────── */
+
+.filter-bar {
+  animation: fadeUp 0.4s ease both 0.15s;
+}
+
+/* ── 25. Tabs ─────────────────────────────────────────────── */
+
+.tabs,
+.ptabs {
+  animation: fadeRight 0.4s ease both 0.1s;
+}
+.tab-btn,
+.ptab {
+  transition: color 0.15s ease, border-color 0.15s ease,
+              transform 0.15s ease !important;
+}
+.tab-btn:hover,
+.ptab:hover {
+  transform: translateY(-1px);
+}
+
+/* ── 26. Onboarding Cards ─────────────────────────────────── */
+
+.ob-card {
+  animation: cardReveal 0.5s cubic-bezier(.22,.68,0,1.1) both;
+}
+.ob-card:nth-child(1) { animation-delay: 100ms; }
+.ob-card:nth-child(2) { animation-delay: 180ms; }
+.ob-card:nth-child(3) { animation-delay: 260ms; }
+
+/* ── 27. Profile Banner ───────────────────────────────────── */
+
+.profile-banner {
+  animation: bannerReveal 0.5s cubic-bezier(.22,.68,0,1.1) both;
+}
+
+/* ── 28. Reduce Motion Accessibility ──────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
+  .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}

@@ -1,0 +1,18 @@
+# Taste
+- Prefers the latest stable version of frameworks and tooling (explicitly asked for "latest version of angular"). Default to the newest stable release rather than whatever is already installed. Confidence: 0.8
+- Prefers C#/.NET for backend services and a code-first approach (EF Core migrations) rather than database-first. Confidence: 0.6
+- Wants "proper standard" architecture — layered/clean separation (domain, application, infrastructure, API) rather than a single lumped project. Confidence: 0.5
+- Prefers frontend-first delivery: wants full, working functionality built on the frontend with dummy/mock data before any real backend integration. Confidence: 0.6
+- Strongly prioritizes error-free, build-verified output ("i dont wnat any error"); expects the code to compile and run cleanly, not just be written. Confidence: 0.7
+- Creates new work inside an existing project folder/structure when one is provided rather than inventing new locations. Confidence: 0.5
+- Wants ready-to-use seed/demo data for every role so the app is immediately usable (e.g. login credentials for all roles). Confidence: 0.6
+- When converting/porting an existing UI, expects faithful 1:1 parity with the original — same look and same behavior ("same as a html"), not a redesign. Confidence: 0.6
+- Expects the existing codebase to be inspected and understood (project structure, framework, database technology, auth system, current conventions) before any changes are made ("First inspect the existing codebase, then implement"). Confidence: 0.7
+- Prefers reusing the existing application's design system, components, authentication conventions, and coding standards rather than rebuilding or inventing new ones. Confidence: 0.7
+- Strongly values backward compatibility: new features must not break existing functionality ("do not break the existing functionality"). Confidence: 0.8
+- Security-conscious by default: least-privilege database permissions, never emailing or logging plaintext credentials/secrets, secrets supplied via environment variables, and hardening against SQL injection and cross-tenant/cross-company data access. Confidence: 0.7
+- Expects automated tests for critical new behavior (e.g. provisioning, authentication, data isolation, failure recovery), not just hand-verification. Confidence: 0.7
+- Wants configuration and setup instructions documented for both local development and production. Confidence: 0.6
+- Cares about backend/data-loading performance: flags it when data loads feel slow and expects backend queries to be optimized (e.g. avoiding whole-table loads, aggregating in the database) rather than accepted as-is. Will repeatedly and insistently escalate ("still getting this much delay — fix that") until the latency is actually resolved. Confidence: 0.65
+- Communicates in short, informal, typo-laden messages ("i need the more performane", "fix that", "reconisition") and expects the agent to infer the concrete task; fills gaps by sending screenshots (e.g. DevTools network timings) rather than prose. Prefer to interpret intent and proceed rather than demand perfectly specified requests. Confidence: 0.6
+- Tends to narrow functionality to one focused approach rather than maintaining parallel/overlapping implementations, explicitly asking to drop one and keep the other ("remove fingerprint functionality and only save face recognition"). Confidence: 0.45

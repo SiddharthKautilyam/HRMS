@@ -1,0 +1,29 @@
+/* ===== ICON SYSTEM ===== */
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.icon svg {
+  display: block;
+}
+
+/* Module tile icons (Dashboard) */
+.sc-tile-icon {
+  width: 36px !important;
+  height: 36px !important;
+}
+.sc-tile-icon svg {
+  width: 18px !important;
+  height: 18px !important;
+  display: block;
+}
+.sc-wrap.list-view .sc-tile-icon {
+  width: 28px !important;
+  height: 28px !important;
+}
+.sc-wrap.list-view .sc-tile-icon svg {
+  width: 15px !important;
+  height: 15px !important;
+}

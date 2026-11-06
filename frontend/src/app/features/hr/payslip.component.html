@@ -1,0 +1,227 @@
+<!-- Hero Banner -->
+<div
+  style="background: var(--p-soft); border-radius: 16px; padding: 15px; display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 15px; gap: 12px; flex-wrap: wrap; border: 1px solid var(--p-mid)"
+>
+  <div style="min-width: 0">
+    <div style="font-size: 1.2rem; font-weight: 800; color: var(--text); margin-bottom: 3px">My Payslips</div>
+    <div style="font-size: 13px; color: #6b7280; margin-bottom: 10px">
+      {{ selectedPayslip()?.employeeName ?? '—' }} - {{ employee()?.employeeCode ?? '—' }} -
+      {{ selectedPayslip()?.department ?? '—' }}
+    </div>
+    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+      <span style="display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 600; color: #059669; background: rgba(5,150,105,.1); border: 1px solid rgba(5,150,105,.2); padding: 4px 10px; border-radius: 20px">
+        <span style="width: 6px; height: 6px; border-radius: 50%; background: #059669; display: inline-block"></span>
+        {{ selectedPayslip()?.status ?? 'No payslips' }}
+      </span>
+      @if (selectedPayslip()) {
+        <span style="font-size: 0.84rem; color: #9ca3af">Pay date: {{ selectedPayslip()?.payDate }}</span>
+      }
+    </div>
+  </div>
+  <div style="display: flex; gap: 8px; flex-wrap: wrap">
+    <button class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 6px" (click)="print()">
+      <span [appIcon]="'print2'"></span> Print
+    </button>
+    <button class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 6px" (click)="ui.open('mailModal')">
+      <span [appIcon]="'mail'"></span> Send Payslip
+    </button>
+    <button class="btn btn-primary btn-sm" style="display: flex; align-items: center; gap: 6px" (click)="downloadPdf()">
+      <span [appIcon]="'download'"></span> Download PDF
+    </button>
+  </div>
+</div>
+
+<!-- Month selector -->
+<div style="margin-bottom: 20px; position: relative; display: inline-block">
+  <button
+    (click)="monthOpen.update((v) => !v); $event.stopPropagation()"
+    style="display: flex; align-items: center; gap: 10px; padding: 9px 16px; background: var(--surface); border: 1.5px solid var(--border); border-radius: 10px; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer; box-shadow: var(--shadow); min-width: 160px; justify-content: space-between"
+  >
+    <span>{{ selectedMonth() || 'Select month' }}</span>
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" [style.transform]="monthOpen() ? 'rotate(180deg)' : ''" style="transition: 0.2s; flex-shrink: 0">
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  </button>
+  @if (monthOpen()) {
+    <div
+      style="position: absolute; top: calc(100% + 6px); left: 0; background: var(--surface); border: 1.5px solid var(--border); border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,.12); z-index: 999; min-width: 180px; padding: 6px; overflow: hidden"
+    >
+      @for (month of months(); track month) {
+        <div
+          (click)="pickMonth(month); $event.stopPropagation()"
+          style="padding: 9px 12px; border-radius: 8px; font-size: 13px; cursor: pointer; transition: 0.15s"
+          [style.font-weight]="month === selectedMonth() ? '700' : '500'"
+          [style.color]="month === selectedMonth() ? 'var(--p)' : 'var(--text)'"
+          [style.background]="month === selectedMonth() ? 'var(--p-soft)' : 'transparent'"
+        >
+          {{ month }}
+        </div>
+      }
+      @if (months().length === 0) {
+        <div style="padding: 9px 12px; font-size: 13px; color: var(--muted)">No payslips available</div>
+      }
+    </div>
+  }
+</div>
+
+<!-- Payslip Document -->
+<div class="card print-doc" #payslipDoc style="max-width: 1200px; margin: 0 auto; overflow: hidden">
+  <div style="background: var(--p-soft); padding: 12px; border-bottom: 1px solid var(--p-mid)">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 10px">
+      <div>
+        <div style="font-size: 1.4rem; font-weight: 700; color: var(--text)">{{ company()?.companyName ?? '—' }}</div>
+        <div style="font-size: 13px; color: #6b7280; margin-top: 8px">
+          {{ company()?.address ?? '' }} - TRN: {{ company()?.trn ?? '—' }}
+        </div>
+      </div>
+      <div style="text-align: right">
+        <div style="font-size: 1rem; font-weight: 700; color: var(--p)">PAYSLIP</div>
+        <div style="font-size: 13px; color: #6b7280; margin-top: 4px">{{ selectedMonthFull() }}</div>
+        <div style="font-size: 13px; color: #6b7280">Pay Date: {{ selectedPayslip()?.payDate ?? '—' }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card-body" style="padding: 15px">
+    <!-- Employee Info -->
+    <div style="display: flex; justify-content: space-between; padding-bottom: 20px; border-bottom: 2px solid var(--border); margin-bottom: 20px; flex-wrap: wrap; gap: 16px">
+      <div>
+        <div style="font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px">
+          Employee Details
+        </div>
+        @for (field of employeeDetails(); track field[0]) {
+          <div style="display: flex; gap: 16px; margin-bottom: 4px">
+            <span style="font-size: 13px; color: var(--muted); width: 110px">{{ field[0] }}</span>
+            <span style="font-size: 13px; font-weight: 600">{{ field[1] }}</span>
+          </div>
+        }
+      </div>
+      <div>
+        <div style="font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px">
+          Payment Details
+        </div>
+        @for (field of paymentDetails(); track field[0]) {
+          <div style="display: flex; gap: 16px; margin-bottom: 4px">
+            <span style="font-size: 13px; color: var(--muted); width: 110px">{{ field[0] }}</span>
+            <span style="font-size: 13px; font-weight: 600">{{ field[1] }}</span>
+          </div>
+        }
+      </div>
+    </div>
+
+    <!-- Earnings & Deductions -->
+    <div class="grid-2" style="margin-bottom: 15px">
+      <div>
+        <div style="font-size: 13px; font-weight: 700; color: var(--success); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px">
+          Earnings
+        </div>
+        @for (line of earnings(); track line[0]) {
+          <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border)">
+            <span style="font-size: 13px; color: var(--muted)">{{ line[0] }}</span>
+            <span style="font-size: 13px; font-weight: 600; color: var(--text)">{{ '$' + line[1].toLocaleString() }}</span>
+          </div>
+        }
+        <div style="display: flex; justify-content: space-between; padding: 10px 0; margin-top: 4px">
+          <span style="font-size: 13px; font-weight: 700">Total Earnings</span>
+          <span style="font-size: 0.95rem; font-weight: 800; color: var(--success)">{{ '$' + totalEarnings().toLocaleString() }}</span>
+        </div>
+      </div>
+      <div>
+        <div style="font-size: 13px; font-weight: 700; color: var(--danger); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px">
+          Deductions
+        </div>
+        @for (line of deductions(); track line[0]) {
+          <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border)">
+            <span style="font-size: 13px; color: var(--muted)">{{ line[0] }}</span>
+            <span style="font-size: 13px; font-weight: 600; color: var(--danger)">{{ '-$' + line[1].toLocaleString() }}</span>
+          </div>
+        }
+        <div style="display: flex; justify-content: space-between; padding: 10px 0; margin-top: 4px">
+          <span style="font-size: 13px; font-weight: 700">Total Deductions</span>
+          <span style="font-size: 0.95rem; font-weight: 800; color: var(--danger)">{{ '-$' + totalDeductions().toLocaleString() }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Net Pay -->
+    <div style="background: var(--p-soft); border: 2px solid rgba(37,99,235,.2); border-radius: 10px; padding: 12px; display: flex; justify-content: space-between; align-items: center">
+      <div>
+        <div style="font-size: 13px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em">Net Pay</div>
+        <div style="font-size: 13px; color: var(--muted); margin-top: 2px">{{ selectedMonthFull() }}</div>
+      </div>
+      <div style="text-align: right">
+        <div style="font-size: 1.5rem; font-weight: 700; color: var(--p)">{{ '$' + netPay().toLocaleString() }}</div>
+        <div style="font-size: 13px; color: var(--muted); margin-top: 8px">{{ company()?.payrollCurrency ?? 'USD' }}</div>
+      </div>
+    </div>
+
+    <div style="text-align: center; margin-top: 24px; font-size: 13px; color: var(--muted)">
+      This is a computer-generated payslip and does not require a signature. - {{ company()?.companyName ?? 'HRMS' }} ©
+      {{ selectedPayslip()?.year ?? '' }}
+    </div>
+  </div>
+</div>
+
+<!-- Send Payslip Mail Modal -->
+<div class="modal-overlay" [class.open]="ui.isOpen('mailModal')" (click)="ui.onOverlayClick($event, 'mailModal')">
+  <div class="modal" style="max-width: 520px">
+    <div class="modal-header">
+      <div>
+        <div style="font-size: 14px; font-weight: 800">Send Payslip via Email</div>
+        <div style="font-size: 12px; color: var(--muted); margin-top: 2px">Select employees to send their payslip</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" (click)="ui.close('mailModal')"><span [appIcon]="'x'"></span></button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Pay Month</label>
+        <input class="form-control" [value]="selectedMonthFull()" readonly style="background: var(--bg); color: var(--muted)" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email Subject</label>
+        <input class="form-control" [value]="'Your Payslip for ' + selectedMonthFull() + ' - ' + (company()?.companyName ?? 'HRMS')" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Message (optional)</label>
+        <textarea class="form-control" rows="2">{{ 'Please find attached your payslip for ' + selectedMonthFull() + '. For any queries, contact HR.' }}</textarea>
+      </div>
+
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px">
+        <label style="font-size: 13px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 8px; cursor: pointer">
+          <input type="checkbox" class="cb" [checked]="allSelected()" (change)="toggleAll($any($event.target).checked)" />
+          Select All Employees
+        </label>
+        <span style="font-size: 12px; color: var(--muted)">{{ selected().size }} selected</span>
+      </div>
+
+      <div style="border: 1px solid var(--border); border-radius: 10px; overflow: hidden; max-height: 220px; overflow-y: auto">
+        @for (recipient of recipients(); track recipient.id) {
+          <label style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); cursor: pointer">
+            <input
+              type="checkbox"
+              class="cb emp-cb"
+              [checked]="selected().has(recipient.id)"
+              (change)="toggleRecipient(recipient.id, $any($event.target).checked)"
+            />
+            <div class="avatar-placeholder avatar-sm" style="background: var(--p-soft); color: var(--p); flex-shrink: 0">
+              {{ initials(recipient.name) }}
+            </div>
+            <div style="flex: 1; min-width: 0">
+              <div style="font-size: 13px; font-weight: 600; color: var(--text)">{{ recipient.name }}</div>
+              <div style="font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
+                {{ recipient.email }}
+              </div>
+            </div>
+            <span style="font-size: 11px; color: var(--muted); flex-shrink: 0">{{ recipient.dept }}</span>
+          </label>
+        }
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" (click)="ui.close('mailModal')">Cancel</button>
+      <button class="btn btn-primary" style="display: flex; align-items: center; gap: 6px" (click)="sendMails()">
+        <span [appIcon]="'mail'"></span> Send Payslips
+      </button>
+    </div>
+  </div>
+</div>

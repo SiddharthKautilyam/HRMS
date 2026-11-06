@@ -1,0 +1,154 @@
+<!-- FAB Button -->
+<button
+  id="aiChatFab"
+  (click)="toggle()"
+  title="AI Assistant"
+  style="position: fixed; bottom: 10px; right: 24px; width: 54px; height: 54px; border-radius: 50%; background: linear-gradient(135deg, #2563eb, #1d4ed8); color: #fff; border: none; box-shadow: 0 6px 24px rgba(37,99,235,.45); cursor: pointer; z-index: 9990; display: flex; align-items: center; justify-content: center; transition: .2s; font-family: inherit"
+>
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+  </svg>
+  <span
+    id="aiUnreadDot"
+    [style.display]="unread() ? 'block' : 'none'"
+    style="position: absolute; top: 8px; right: 8px; width: 10px; height: 10px; background: #ef4444; border-radius: 50%; border: 2px solid #fff"
+  ></span>
+</button>
+
+<!-- Chat Panel -->
+@if (open()) {
+  <div
+    id="aiChatPanel"
+    style="display: flex; flex-direction: column; position: fixed; bottom: 70px; right: 12px; width: 360px; max-width: calc(100vw - 24px); height: 500px; max-height: calc(100vh - 120px); background: #fff; border-radius: 16px; box-shadow: 0 16px 56px rgba(0,0,0,.22); z-index: 9990; overflow: hidden; animation: aiSlideUp .25s ease"
+  >
+    <!-- Header -->
+    <div
+      style="background: linear-gradient(135deg, #2563eb, #1d4ed8); padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0"
+    >
+      <div style="display: flex; align-items: center; gap: 10px">
+        <div
+          style="width: 36px; height: 36px; border-radius: 50%; background: rgba(255,255,255,.2); display: flex; align-items: center; justify-content: center; flex-shrink: 0"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+        </div>
+        <div>
+          <div style="font-size: 13px; font-weight: 700; color: #fff">AI HR Assistant</div>
+          <div style="display: flex; align-items: center; gap: 5px; margin-top: 2px">
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: #4ade80; display: inline-block"></span>
+            <span style="font-size: 11px; color: rgba(255,255,255,.8)">Online · Always available</span>
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 6px">
+        <button
+          (click)="clear()"
+          title="Clear chat"
+          style="width: 28px; height: 28px; border-radius: 8px; background: rgba(255,255,255,.15); border: none; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+            <path d="M10 11v6" />
+            <path d="M14 11v6" />
+          </svg>
+        </button>
+        <button
+          (click)="toggle()"
+          title="Close"
+          style="width: 28px; height: 28px; border-radius: 8px; background: rgba(255,255,255,.15); border: none; color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Messages -->
+    <div
+      #msgs
+      id="aiMsgs"
+      style="flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: #f8fafc; scroll-behavior: smooth"
+    >
+      @for (m of messages(); track m.id) {
+        @if (m.from === 'bot') {
+          <div style="display: flex; gap: 8px; align-items: flex-start">
+            <div
+              style="width: 28px; height: 28px; border-radius: 50%; background: #2563eb; color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 10px; font-weight: 700"
+            >
+              AI
+            </div>
+            <div
+              style="background: #fff; padding: 10px 12px; border-radius: 12px 12px 12px 4px; font-size: 13px; color: #0f172a; line-height: 1.55; box-shadow: 0 1px 4px rgba(0,0,0,.08); max-width: 90%"
+              [innerHTML]="m.html"
+            ></div>
+          </div>
+        } @else {
+          <div style="display: flex; justify-content: flex-end">
+            <div
+              style="background: #2563eb; color: #fff; padding: 10px 12px; border-radius: 12px 12px 4px 12px; font-size: 13px; line-height: 1.55; max-width: 82%; word-break: break-word"
+            >
+              {{ m.html }}
+            </div>
+          </div>
+        }
+      }
+
+      @if (typing()) {
+        <div style="display: flex; gap: 8px; align-items: flex-start">
+          <div
+            style="width: 28px; height: 28px; border-radius: 50%; background: #2563eb; color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 10px; font-weight: 700"
+          >
+            AI
+          </div>
+          <div
+            style="background: #fff; padding: 10px 14px; border-radius: 12px 12px 12px 4px; box-shadow: 0 1px 4px rgba(0,0,0,.08); display: flex; gap: 4px; align-items: center"
+          >
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: #94a3b8; animation: aiDot 1.2s infinite 0s"></span>
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: #94a3b8; animation: aiDot 1.2s infinite .2s"></span>
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: #94a3b8; animation: aiDot 1.2s infinite .4s"></span>
+          </div>
+        </div>
+      }
+    </div>
+
+    <!-- Quick chips -->
+    <div
+      style="padding: 8px 12px; display: flex; gap: 6px; flex-wrap: wrap; border-top: 1px solid #e2e8f0; background: #fff; flex-shrink: 0"
+    >
+      @for (chip of chips(); track chip) {
+        <button
+          (click)="useChip(chip)"
+          style="padding: 5px 10px; border-radius: 20px; border: 1.5px solid #dbeafe; background: #eff6ff; color: #2563eb; font-size: 11px; font-weight: 600; cursor: pointer; font-family: inherit; white-space: nowrap"
+        >
+          {{ chip }}
+        </button>
+      }
+    </div>
+
+    <!-- Input -->
+    <div style="padding: 10px 12px; border-top: 1px solid #e2e8f0; background: #fff; flex-shrink: 0; display: flex; gap: 8px">
+      <input
+        type="text"
+        placeholder="Ask me anything..."
+        [(ngModel)]="inputText"
+        (keypress)="onEnter($event)"
+        style="flex: 1; padding: 9px 12px; border: 1.5px solid #e2e8f0; border-radius: 10px; font-size: 13px; color: #0f172a; background: #fff; outline: none"
+      />
+      <button
+        (click)="send()"
+        style="width: 38px; height: 38px; border-radius: 10px; background: #2563eb; color: #fff; border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13" />
+          <polygon points="22 2 15 22 11 13 2 9 22 2" />
+        </svg>
+      </button>
+    </div>
+  </div>
+}

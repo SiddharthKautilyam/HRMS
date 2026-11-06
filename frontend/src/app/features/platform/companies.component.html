@@ -1,0 +1,306 @@
+<div class="flex justify-between items-center" style="margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
+  <div>
+    <div class="page-title">Companies</div>
+    <div class="page-subtitle">Create and manage tenant companies — each gets its own dedicated database and admin portal</div>
+  </div>
+  <div class="flex gap-2">
+    <button class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 6px;" (click)="load()">
+      <span [appIcon]="'sync'"></span> Refresh
+    </button>
+    <button class="btn btn-primary btn-sm" style="display: flex; align-items: center; gap: 6px;" (click)="openCreate()">
+      <span [appIcon]="'plus'"></span> New Company
+    </button>
+  </div>
+</div>
+
+@if (activationUrl(); as url) {
+  <div class="alert alert-warning" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+      <strong>Activation link (share with the company admin — email delivery is disabled in this environment)</strong>
+      <button class="btn btn-ghost btn-sm" (click)="dismissLink()"><span [appIcon]="'x'"></span></button>
+    </div>
+    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+      <input class="form-control" type="text" [value]="url" readonly style="flex: 1; min-width: 260px;" />
+      <button class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 6px;" (click)="copyLink()">
+        <span [appIcon]="'link'"></span> Copy
+      </button>
+    </div>
+  </div>
+}
+
+<div class="card">
+  <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+    <div class="card-title">Registered Companies</div>
+    <div class="input-group" style="max-width: 280px;">
+      <span class="input-icon" [appIcon]="'search'"></span>
+      <input class="form-control" type="text" placeholder="Search name, code or email" [(ngModel)]="search" (keyup.enter)="load()" />
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Company</th>
+          <th>Status</th>
+          <th>Database</th>
+          <th>Administrator</th>
+          <th>Invitation</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        @if (loading()) {
+          <tr>
+            <td colspan="6" style="text-align: center; color: var(--muted);">Loading companies…</td>
+          </tr>
+        } @else if (companies().length === 0) {
+          <tr>
+            <td colspan="6" style="text-align: center; color: var(--muted);">No companies yet. Create one to provision its database.</td>
+          </tr>
+        } @else {
+          @for (c of companies(); track c.id) {
+            <tr>
+              <td>
+                <div style="font-weight: 700; font-size: 14px;">{{ c.name }}</div>
+                <div style="display: flex; align-items: center; gap: 6px; margin-top: 4px;">
+                  <span class="badge" style="background: var(--p-soft); color: var(--p); font-weight: 700;">{{ c.code }}</span>
+                  @if (c.isDefault) {
+                    <span class="badge badge-info">Default</span>
+                  }
+                </div>
+              </td>
+              <td>
+                <span class="badge" [ngClass]="statusBadge(c.status)">{{ c.status }}</span>
+              </td>
+              <td style="font-size: 12px; color: var(--muted);">{{ c.databaseName || '—' }}</td>
+              <td>
+                <div style="font-weight: 600; font-size: 13px;">{{ c.adminFullName }}</div>
+                <div style="font-size: 11px; color: var(--muted);">{{ c.adminEmail }}</div>
+              </td>
+              <td>
+                <span class="badge" [ngClass]="inviteBadge(c.invitationStatus)">{{ c.invitationStatus }}</span>
+              </td>
+              <td>
+                <div style="display: flex; gap: 6px;">
+                  <button class="tbl-btn" data-tooltip="Details" (click)="view(c)" [disabled]="busyId() === c.id">
+                    <span [appIcon]="'eye'"></span>
+                  </button>
+                  <button class="tbl-btn" data-tooltip="Edit company" (click)="edit(c)" [disabled]="busyId() === c.id">
+                    <span [appIcon]="'edit'"></span>
+                  </button>
+                  <button class="tbl-btn" data-tooltip="Retry provisioning" (click)="retry(c)" [disabled]="busyId() === c.id">
+                    <span [appIcon]="'sync'"></span>
+                  </button>
+                  <button class="tbl-btn" data-tooltip="Resend invitation" (click)="resend(c)" [disabled]="busyId() === c.id">
+                    <span [appIcon]="'mail'"></span>
+                  </button>
+                  @if (!c.isDefault) {
+                    <button
+                      class="tbl-btn"
+                      [class.danger]="c.status !== 'Suspended'"
+                      [class.success]="c.status === 'Suspended'"
+                      [attr.data-tooltip]="c.status === 'Suspended' ? 'Activate' : 'Suspend'"
+                      (click)="toggleStatus(c)"
+                      [disabled]="busyId() === c.id"
+                    >
+                      <span [appIcon]="c.status === 'Suspended' ? 'check' : 'lock'"></span>
+                    </button>
+                    <button
+                      class="tbl-btn danger"
+                      data-tooltip="Delete company"
+                      (click)="confirmDelete(c)"
+                      [disabled]="busyId() === c.id"
+                    >
+                      <span [appIcon]="'trash'"></span>
+                    </button>
+                  }
+                </div>
+              </td>
+            </tr>
+          }
+        }
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Create company modal -->
+@if (showCreate()) {
+  <div class="modal-overlay open" (click)="closeCreate()">
+    <div class="modal" style="max-width: 560px;" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <div style="font-size: 1.1rem; font-weight: 700;">New Company</div>
+        <button class="btn btn-ghost btn-sm" (click)="closeCreate()"><span [appIcon]="'x'"></span></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Company Name <span style="color: var(--danger)">*</span></label>
+          <input class="form-control" type="text" [(ngModel)]="form.name" placeholder="e.g. Acme Widgets LLC" />
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Company Code</label>
+            <input class="form-control" type="text" [(ngModel)]="form.code" placeholder="Auto-generated" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Time Zone</label>
+            <input class="form-control" type="text" [(ngModel)]="form.timeZone" placeholder="e.g. Asia/Dubai" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Administrator Name <span style="color: var(--danger)">*</span></label>
+          <input class="form-control" type="text" [(ngModel)]="form.adminFullName" placeholder="Full name" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Administrator Email <span style="color: var(--danger)">*</span></label>
+          <input class="form-control" type="email" [(ngModel)]="form.adminEmail" placeholder="admin@company.com" />
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Contact Name</label>
+            <input class="form-control" type="text" [(ngModel)]="form.contactName" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Contact Email</label>
+            <input class="form-control" type="email" [(ngModel)]="form.contactEmail" />
+          </div>
+        </div>
+        <div class="alert alert-info" style="font-size: 12px;">
+          A dedicated database will be created and initialized with the application schema only. No existing data is copied.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" (click)="closeCreate()">Cancel</button>
+        <button class="btn btn-primary" (click)="save()" [disabled]="saving()">
+          {{ saving() ? 'Provisioning…' : 'Create & Provision' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Company detail modal -->
+@if (showDetail()) {
+  @if (detail(); as d) {
+    <div class="modal-overlay open" (click)="closeDetail()">
+      <div class="modal" style="max-width: 680px;" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div>
+            <div style="font-size: 1.1rem; font-weight: 700;">{{ d.name }}</div>
+            <div style="font-size: 12px; color: var(--muted);">{{ d.code }} · {{ d.databaseName || 'not provisioned' }}</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" (click)="closeDetail()"><span [appIcon]="'x'"></span></button>
+        </div>
+        <div class="modal-body">
+          <div class="grid-2" style="margin-bottom: 16px;">
+            <div><div class="text-muted text-sm">Status</div><span class="badge" [ngClass]="statusBadge(d.status)">{{ d.status }}</span></div>
+            <div><div class="text-muted text-sm">Invitation</div><span class="badge" [ngClass]="inviteBadge(d.invitationStatus)">{{ d.invitationStatus }}</span></div>
+            <div><div class="text-muted text-sm">Administrator</div><div style="font-weight: 600;">{{ d.adminFullName }}</div><div style="font-size: 12px; color: var(--muted);">{{ d.adminEmail }}</div></div>
+            <div><div class="text-muted text-sm">Provisioned</div><div style="font-weight: 600;">{{ d.provisionedAtUtc ? (d.provisionedAtUtc | date: 'medium') : '—' }}</div></div>
+          </div>
+
+          @if (d.provisioningError) {
+            <div class="alert alert-danger" style="font-size: 12px;">{{ d.provisioningError }}</div>
+          }
+
+          <div class="card-title" style="margin-bottom: 8px;">Provisioning Log</div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Step</th><th>Result</th><th>Message</th><th>When</th></tr>
+              </thead>
+              <tbody>
+                @for (log of d.provisioningLogs; track log.occurredAtUtc + log.step) {
+                  <tr>
+                    <td style="font-weight: 600;">{{ log.step }}</td>
+                    <td><span class="badge" [ngClass]="log.succeeded ? 'badge-success' : 'badge-danger'">{{ log.succeeded ? 'OK' : 'Failed' }}</span></td>
+                    <td style="font-size: 12px; color: var(--muted);">{{ log.message || '—' }}</td>
+                    <td style="font-size: 12px; color: var(--muted);">{{ log.occurredAtUtc | date: 'short' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" (click)="closeDetail()">Close</button>
+          <button class="btn btn-primary" (click)="closeDetail(); resend(d)" [disabled]="!d.databaseName">
+            Resend Invitation
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+}
+
+<!-- Edit company modal -->
+@if (showEdit()) {
+  <div class="modal-overlay open" (click)="closeEdit()">
+    <div class="modal" style="max-width: 560px;" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <div style="font-size: 1.1rem; font-weight: 700;">Edit Company</div>
+        <button class="btn btn-ghost btn-sm" (click)="closeEdit()"><span [appIcon]="'x'"></span></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Company Name <span style="color: var(--danger)">*</span></label>
+          <input class="form-control" type="text" [(ngModel)]="editForm.name" placeholder="e.g. Acme Widgets LLC" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Administrator Name <span style="color: var(--danger)">*</span></label>
+          <input class="form-control" type="text" [(ngModel)]="editForm.adminFullName" placeholder="Full name" />
+        </div>
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Contact Name</label>
+            <input class="form-control" type="text" [(ngModel)]="editForm.contactName" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Contact Email</label>
+            <input class="form-control" type="email" [(ngModel)]="editForm.contactEmail" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Time Zone</label>
+          <input class="form-control" type="text" [(ngModel)]="editForm.timeZone" placeholder="e.g. Asia/Dubai" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" (click)="closeEdit()">Cancel</button>
+        <button class="btn btn-primary" (click)="saveEdit()" [disabled]="saving()">
+          {{ saving() ? 'Saving…' : 'Save Changes' }}
+        </button>
+      </div>
+    </div>
+  </div>
+}
+
+<!-- Delete confirmation modal -->
+@if (showDeleteConfirm()) {
+  @if (companyToDelete(); as c) {
+    <div class="modal-overlay open" (click)="cancelDelete()">
+      <div class="modal" style="max-width: 480px;" (click)="$event.stopPropagation()">
+        <div class="modal-header">
+          <div style="font-size: 1.1rem; font-weight: 700; color: var(--danger);">Delete Company</div>
+          <button class="btn btn-ghost btn-sm" (click)="cancelDelete()"><span [appIcon]="'x'"></span></button>
+        </div>
+        <div class="modal-body">
+          <p style="margin-bottom: 12px; font-size: 14px;">
+            Are you sure you want to delete <strong>{{ c.name }}</strong> (<code>{{ c.code }}</code>)?
+          </p>
+          <div class="alert alert-danger" style="font-size: 12.5px; line-height: 1.4;">
+            <strong>Warning:</strong> This will permanently delete the dedicated database
+            <strong>{{ c.databaseName || 'associated' }}</strong> and all data inside it. This action cannot be undone.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-outline" (click)="cancelDelete()">Cancel</button>
+          <button class="btn btn-primary" style="background: var(--danger); border-color: var(--danger);" (click)="deleteCompany()" [disabled]="saving()">
+            {{ saving() ? 'Deleting…' : 'Delete Company & Database' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+}

@@ -1,0 +1,227 @@
+/* ============================================================
+   Shared widget styles that were previously inline in app.js
+   (custom select) and showToast(). Kept as real classes so the
+   Angular components can stay declarative.
+   ============================================================ */
+
+/* ---------- CUSTOM SELECT (customSelect) ---------- */
+.csel-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.csel-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  transition: var(--t);
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.csel-btn.open {
+  border-color: var(--p);
+}
+
+.csel-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.csel-arrow {
+  transition: 0.2s;
+  flex-shrink: 0;
+  color: var(--muted);
+  display: flex;
+}
+
+.csel-arrow.up {
+  transform: rotate(180deg);
+}
+
+.csel-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  z-index: 9999;
+  padding: 4px;
+}
+
+.csel-opt {
+  padding: 8px 10px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  transition: 0.12s;
+  white-space: nowrap;
+}
+
+.csel-opt:hover {
+  background: var(--bg);
+}
+
+.csel-opt.csel-active {
+  font-weight: 600;
+  color: var(--p);
+  background: var(--p-soft);
+}
+
+/* ---------- TOASTS (showToast) ---------- */
+.toast-host {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.toast {
+  background: #1e293b;
+  color: #fff;
+  padding: 14px 20px;
+  border-radius: 12px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  animation: fadeInUp 0.3s ease;
+  max-width: 320px;
+}
+
+.toast-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+
+.toast.leaving {
+  opacity: 0;
+  transition: 0.3s;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ---------- PRINT (payslip) ---------- */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-doc,
+  .print-doc * {
+    visibility: visible;
+  }
+  .print-doc {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    max-width: 100%;
+    box-shadow: none;
+    border: none;
+    border-radius: 0;
+    margin: 0;
+  }
+  .print-doc .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+}
+
+/* ---------- AI CHAT ---------- */
+@keyframes aiSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes aiDot {
+  0%,
+  80%,
+  100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+#aiChatFab:hover {
+  transform: scale(1.08) !important;
+}
+
+#aiMsgs::-webkit-scrollbar {
+  width: 4px;
+}
+
+#aiMsgs::-webkit-scrollbar-thumb {
+  background: #e2e8f0;
+  border-radius: 4px;
+}
+
+@media (max-width: 768px) {
+  #aiChatPanel {
+    right: 8px !important;
+    bottom: 72px !important;
+    width: calc(100vw - 16px) !important;
+  }
+  #aiChatFab {
+    right: 10px !important;
+    bottom: 6px !important;
+    width: 40px !important;
+    height: 40px !important;
+  }
+  #aiChatFab svg {
+    width: 18px;
+    height: 18px;
+  }
+  #aiUnreadDot {
+    top: 5px !important;
+    right: 5px !important;
+    width: 8px !important;
+    height: 8px !important;
+  }
+}

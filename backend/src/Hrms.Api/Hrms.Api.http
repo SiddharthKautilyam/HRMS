@@ -1,0 +1,94 @@
+@Hrms.Api_HostAddress = http://localhost:5096
+
+### Health
+GET {{Hrms.Api_HostAddress}}/health
+Accept: application/json
+
+### Login — Super Admin
+# @name adminLogin
+POST {{Hrms.Api_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@hrnexus.com",
+  "password": "Admin@123"
+}
+
+### Login — HR Manager
+# @name hrLogin
+POST {{Hrms.Api_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "hr@hrnexus.com",
+  "password": "Hr@12345"
+}
+
+### Login — Manager
+POST {{Hrms.Api_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "manager@hrnexus.com",
+  "password": "Manager@123"
+}
+
+### Login — Employee
+POST {{Hrms.Api_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "sarah@hrnexus.com",
+  "password": "Employee@123"
+}
+
+### Current user
+GET {{Hrms.Api_HostAddress}}/api/auth/me
+Authorization: Bearer {{hrLogin.response.body.accessToken}}
+
+### Employees (paged)
+GET {{Hrms.Api_HostAddress}}/api/employees?page=1&pageSize=10
+Authorization: Bearer {{hrLogin.response.body.accessToken}}
+
+### Dashboard stats
+GET {{Hrms.Api_HostAddress}}/api/dashboard/stats
+Authorization: Bearer {{hrLogin.response.body.accessToken}}
+
+### Leave requests
+GET {{Hrms.Api_HostAddress}}/api/leave/requests?page=1&pageSize=10
+Authorization: Bearer {{hrLogin.response.body.accessToken}}
+
+### Approve a leave request (replace the id)
+POST {{Hrms.Api_HostAddress}}/api/leave/requests/00000000-0000-0000-0000-000000000000/approve
+Authorization: Bearer {{hrLogin.response.body.accessToken}}
+Content-Type: application/json
+
+{ "note": "Approved in demo" }
+
+### Attendance summary
+GET {{Hrms.Api_HostAddress}}/api/attendance/summary
+Authorization: Bearer {{hrLogin.response.body.accessToken}}
+
+### Payroll summary
+GET {{Hrms.Api_HostAddress}}/api/payroll/summary
+Authorization: Bearer {{hrLogin.response.body.accessToken}}
+
+### Run payroll for a new period
+POST {{Hrms.Api_HostAddress}}/api/payroll/run
+Authorization: Bearer {{hrLogin.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "month": 3,
+  "year": 2026,
+  "payDate": "2026-03-31",
+  "paymentMethod": "BankTransfer"
+}
+
+### Approvals summary
+GET {{Hrms.Api_HostAddress}}/api/approvals/summary
+Authorization: Bearer {{hrLogin.response.body.accessToken}}
+
+### Announcements
+GET {{Hrms.Api_HostAddress}}/api/announcements
+Authorization: Bearer {{hrLogin.response.body.accessToken}}

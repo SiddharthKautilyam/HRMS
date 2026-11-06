@@ -1,0 +1,346 @@
+<div class="auth-page">
+  <!-- Animated background layers -->
+  <div class="bg-dots"></div>
+  <div class="bg-orb o1"></div>
+  <div class="bg-orb o2"></div>
+
+  <!-- Floating particles -->
+  <div class="bg-particle" style="width:8px;height:8px;background:#3b82f6;left:10%;animation-duration:14s;animation-delay:0s"></div>
+  <div class="bg-particle" style="width:5px;height:5px;background:#7c3aed;left:25%;animation-duration:18s;animation-delay:-4s"></div>
+  <div class="bg-particle" style="width:10px;height:10px;background:#06b6d4;left:40%;animation-duration:12s;animation-delay:-8s"></div>
+  <div class="bg-particle" style="width:6px;height:6px;background:#10b981;left:60%;animation-duration:16s;animation-delay:-2s"></div>
+  <div class="bg-particle" style="width:9px;height:9px;background:#f59e0b;left:75%;animation-duration:20s;animation-delay:-6s"></div>
+  <div class="bg-particle" style="width:5px;height:5px;background:#2563eb;left:88%;animation-duration:15s;animation-delay:-10s"></div>
+  <div class="bg-particle" style="width:7px;height:7px;background:#6d28d9;left:50%;animation-duration:22s;animation-delay:-3s"></div>
+
+  <div class="wrap">
+    <!-- LEFT FORM -->
+    <div class="left">
+      <div class="logo">
+        <img [src]="resolvedTenantLogo() || 'assets/images/main-logo.png'" alt="Logo" style="max-width: 150px; max-height: 56px; object-fit: contain;" />
+      </div>
+      <h1 class="text-align-center">Welcome 👋</h1>
+      <p class="sub text-align-center">
+        @if (resolvedTenantLogo()) {
+          Sign in to {{ resolvedTenantName() }}
+        } @else {
+          Please enter your login details below
+        }
+      </p>
+
+      <!-- Quick Demo Login Switcher (Disabled in Production Builds) -->
+      @if (showDemoAccounts) {
+        <div style="margin: 16px 0; padding: 10px; background: rgba(37,99,235,0.06); border: 1px dashed rgba(37,99,235,0.25); border-radius: 8px;">
+          <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--p); margin-bottom: 6px;">
+            Quick Demo Accounts:
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+            @for (acc of demoAccounts; track acc.label) {
+              <button
+                type="button"
+                (click)="selectDemo(acc)"
+                style="font-size: 11px; font-weight: 600; padding: 4px 8px; border-radius: 6px; cursor: pointer; border: 1px solid var(--border); background: var(--bg-card, #ffffff); color: var(--text-color, #1e293b); transition: all 0.15s ease;"
+                [style.borderColor]="email === acc.email ? 'var(--p)' : 'var(--border)'"
+                [style.background]="email === acc.email ? 'rgba(37,99,235,0.1)' : 'var(--bg-card, #ffffff)'"
+                [style.color]="email === acc.email ? 'var(--p)' : 'inherit'"
+              >
+                {{ acc.label }}
+              </button>
+            }
+          </div>
+        </div>
+      }
+
+      <form (submit)="go($event)">
+        <div class="fg">
+          <label>Email Address</label>
+          <div class="iw">
+            <span style="color: var(--p)" [appIcon]="'mail'"></span>
+            <input type="email" name="email" placeholder="you@company.com" [(ngModel)]="email" />
+          </div>
+        </div>
+        <div class="fg">
+          <label>Company Code <span style="color: var(--muted); font-weight: 400">(optional)</span></label>
+          <div class="iw">
+            <span style="color: var(--p)" [appIcon]="'company'"></span>
+            <input
+              type="text"
+              name="companyCode"
+              placeholder="e.g. ACME or leave blank for default"
+              [ngModel]="companyCode"
+              (ngModelChange)="onCompanyCodeChange($event)"
+              autocomplete="off"
+            />
+          </div>
+        </div>
+        <div class="fg">
+          <label>Password</label>
+          <div class="iw">
+            <span style="color: var(--p)" [appIcon]="'lock'"></span>
+            <input
+              [type]="showPassword() ? 'text' : 'password'"
+              name="password"
+              id="pw"
+              placeholder="Enter password"
+              [(ngModel)]="password"
+            />
+            <button type="button" class="eye" (click)="togglePassword()">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="row">
+          <label><input type="checkbox" name="remember" [(ngModel)]="rememberMe" /> Remember me</label>
+          <a routerLink="/forgot-password" class="forgot">Forgot password?</a>
+        </div>
+        <button type="submit" class="btn-main" [disabled]="submitting()">
+          {{ submitting() ? 'Signing in...' : 'Sign In' }}
+        </button>
+      </form>
+
+      <p class="signup" style="margin-top: 24px;">Don't have an account? <a href="#">Contact Admin</a></p>
+    </div>
+
+    <!-- RIGHT SLIDER -->
+    <div class="right">
+      <div class="grid-bg"></div>
+
+      <!-- Floating shapes -->
+      <div class="fe gem">
+        <svg width="44" height="44" viewBox="0 0 52 52">
+          <polygon points="26,4 48,20 48,36 26,50 4,36 4,20" fill="none" stroke="rgba(96,165,250,.7)" stroke-width="1.5" />
+          <polygon points="26,12 40,22 40,34 26,44 12,34 12,22" fill="rgba(37,99,235,.2)" stroke="rgba(96,165,250,.35)" stroke-width="1" />
+        </svg>
+      </div>
+      <div class="fe ring">
+        <svg width="40" height="40" viewBox="0 0 46 46">
+          <circle cx="23" cy="23" r="19" fill="rgba(13,148,136,.2)" stroke="rgba(13,148,136,.7)" stroke-width="2" />
+          <circle cx="23" cy="23" r="10" fill="rgba(13,148,136,.1)" stroke="rgba(13,148,136,.4)" stroke-width="1.5" />
+        </svg>
+      </div>
+      <div class="fe tri">
+        <svg width="34" height="34" viewBox="0 0 38 38">
+          <polygon points="19,2 36,34 2,34" fill="rgba(245,158,11,.15)" stroke="rgba(245,158,11,.7)" stroke-width="1.5" />
+        </svg>
+      </div>
+      <div class="fe star">
+        <svg width="26" height="26" viewBox="0 0 28 28">
+          <polygon points="14,2 17,10 26,10 19,16 22,24 14,19 6,24 9,16 2,10 11,10" fill="rgba(96,165,250,.3)" stroke="rgba(96,165,250,.7)" stroke-width="1" />
+        </svg>
+      </div>
+
+      <!-- Slider -->
+      <div class="slider-wrap">
+        <div class="slides">
+          @for (slide of slides; track slide.title; let i = $index) {
+            <div class="slide" [class.active]="activeSlide() === i" [class.exit]="exitingSlide() === i">
+              <div class="slide-illus" [innerHTML]="slide.svg | safeHtml"></div>
+              <div class="slide-text">
+                <h2>{{ slide.title }}</h2>
+                <p>{{ slide.text }}</p>
+                <div class="slide-pills">
+                  @for (pill of slide.pills; track pill) {
+                    <span class="slide-pill">{{ pill }}</span>
+                  }
+                </div>
+              </div>
+            </div>
+          }
+        </div>
+
+        <!-- Dots -->
+        <div class="slider-dots">
+          @for (dot of dots; track dot) {
+            <button class="sdot" [class.active]="activeSlide() === dot" (click)="goSlide(dot)"></button>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Face Verification Modal Overlay -->
+  @if (showFaceModal()) {
+    <div class="face-modal-backdrop">
+      <div class="face-modal-card">
+        <!-- Header -->
+        <div class="face-modal-header">
+          <div class="face-header-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/>
+            </svg>
+          </div>
+          <div class="face-header-info">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <h3 class="face-header-title">Biometric Face Check</h3>
+              @if (isFaceEnrolled()) {
+                <button type="button" class="re-enroll-btn" (click)="reEnrollFace()" title="Register a new face profile">
+                  🔄 Re-enroll Face
+                </button>
+              }
+            </div>
+            <div class="face-header-sub">
+              <span>Employee:</span>
+              <strong style="color: #f1f5f9;">{{ enrolledEmployeeName() || 'Employee' }}</strong>
+              @if (enrolledEmployeeCode()) {
+                <span class="emp-badge">{{ enrolledEmployeeCode() }}</span>
+              }
+              <span [style.color]="isFaceEnrolled() ? '#34d399' : '#fbbf24'" style="margin-left: auto; font-size: 11px;">
+                {{ isFaceEnrolled() ? 'Face Profile: Active ✓' : '⚠️ No Face Profile' }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Camera Area -->
+        <div class="face-camera-container">
+          <video
+            #faceVideo
+            autoplay
+            muted
+            playsinline
+            class="face-video"
+            [style.display]="cameraActive() ? 'block' : 'none'"
+          ></video>
+          <canvas #faceCanvas style="display: none;"></canvas>
+
+          @if (cameraActive()) {
+            <!-- Biometric HUD Reticle Overlay -->
+            <div class="face-reticle-overlay">
+              <div
+                class="reticle-frame"
+                [class.matched]="faceStatus() === 'matched'"
+                [class.failed]="faceStatus() === 'failed'"
+              >
+                <div class="corner-bracket tl"></div>
+                <div class="corner-bracket tr"></div>
+                <div class="corner-bracket bl"></div>
+                <div class="corner-bracket br"></div>
+                @if (faceStatus() === 'scanning') {
+                  <div class="laser-line"></div>
+                }
+              </div>
+            </div>
+          } @else {
+            <div class="camera-placeholder">
+              <div class="cam-icon-box">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                  <circle cx="12" cy="13" r="4"/>
+                  <line x1="1" y1="1" x2="23" y2="23" stroke="#ef4444" stroke-width="2"/>
+                </svg>
+              </div>
+              <p style="font-size: 13px; color: #94a3b8; max-width: 280px; margin: 0;">
+                Camera access unavailable. Grant permission in browser or retry.
+              </p>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;">
+                <button
+                  type="button"
+                  (click)="retryCamera()"
+                  style="padding: 6px 14px; font-size: 12px; font-weight: 600; border-radius: 6px; background: rgba(59, 130, 246, 0.2); border: 1px solid #3b82f6; color: #93c5fd; cursor: pointer;"
+                >
+                  🔄 Retry Camera
+                </button>
+              </div>
+            </div>
+          }
+        </div>
+
+        <!-- Match Score Progress Meter -->
+        <div class="face-match-meter">
+          <div class="match-score-row">
+            <span>Face Match Accuracy:</span>
+            @if (faceMatchScore() !== null) {
+              <span
+                class="match-score-badge"
+                [class.pass]="faceMatchScore()! >= faceThreshold"
+                [class.fail]="faceMatchScore()! < faceThreshold"
+              >
+                {{ faceMatchScore() }}% MATCH
+                @if (faceMatchScore()! >= faceThreshold) { (≥{{ faceThreshold }}% PASS) } @else { (&lt;{{ faceThreshold }}% REJECTED) }
+              </span>
+            } @else {
+              <span class="match-score-badge neutral">READY TO SCAN</span>
+            }
+          </div>
+          <div class="match-bar-track">
+            <div class="match-threshold-marker" [title]="faceThreshold + '% Threshold'"></div>
+            <div
+              class="match-bar-fill"
+              [style.width.%]="faceMatchScore() ?? 0"
+              [class.pass]="(faceMatchScore() ?? 0) >= faceThreshold"
+              [class.fail]="(faceMatchScore() ?? 0) > 0 && (faceMatchScore() ?? 0) < faceThreshold"
+            ></div>
+          </div>
+          <div class="match-threshold-label">
+            <span>0%</span>
+            <span style="color: #facc15; font-weight: 700;">▲ {{ faceThreshold }}% Required to Log In</span>
+            <span>100%</span>
+          </div>
+        </div>
+
+        <!-- Status Message Banner -->
+        <div class="face-status-bar" [ngClass]="faceStatus()">
+          @if (faceStatus() === 'scanning') {
+            <span class="spin-indicator"></span>
+          } @else if (faceStatus() === 'matched') {
+            <span>✅</span>
+          } @else if (faceStatus() === 'failed') {
+            <span>❌</span>
+          } @else {
+            <span>👤</span>
+          }
+          <span>{{ faceStatusMessage() }}</span>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="face-modal-actions">
+          @if (!isFaceEnrolled()) {
+            <button
+              type="button"
+              class="btn-verify-face"
+              style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);"
+              (click)="enrollCurrentFace()"
+              [disabled]="faceVerifying()"
+            >
+              @if (faceVerifying()) {
+                <span class="spin-indicator"></span>
+                <span>Registering Face...</span>
+              } @else {
+                <span>📸 Register My Face as {{ enrolledEmployeeName() || 'Employee' }}</span>
+              }
+            </button>
+          } @else {
+            <button
+              type="button"
+              class="btn-verify-face"
+              (click)="verifyFace()"
+              [disabled]="faceVerifying() || faceStatus() === 'matched'"
+            >
+              @if (faceVerifying()) {
+                <span class="spin-indicator"></span>
+                <span>Analyzing Facial Biometrics...</span>
+              } @else if (faceStatus() === 'matched') {
+                <span>✓ Verified ({{ faceMatchScore() }}%) — Logging in...</span>
+              } @else {
+                <span>📸 Scan & Verify Face</span>
+              }
+            </button>
+          }
+
+          <button
+            type="button"
+            class="btn-cancel-face"
+            (click)="cancelFaceVerification()"
+            [disabled]="faceStatus() === 'matched'"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  }
+</div>
+
