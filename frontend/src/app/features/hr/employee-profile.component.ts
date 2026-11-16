@@ -427,7 +427,7 @@ interface DocRow {
             </div>
             <div class="form-group">
               <label class="form-label">Reporting To</label>
-              <app-select [options]="reportingOptions" [value]="job().reportsTo" (valueChange)="patchJob('reportsTo', $event)" width="100%" />
+              <app-select [options]="reportingOptions()" [value]="job().reportsTo" (valueChange)="patchJob('reportsTo', $event)" width="100%" />
             </div>
             <div class="form-group">
               <label class="form-label">Join Date</label>
@@ -474,6 +474,10 @@ interface DocRow {
             <div class="form-group">
               <label class="form-label">City</label>
               <input class="form-control" [value]="contact().city" (input)="patchContact('city', $any($event.target).value)" />
+            </div>
+            <div class="form-group">
+              <label class="form-label">State / Province</label>
+              <input class="form-control" [value]="contact().state" (input)="patchContact('state', $any($event.target).value)" />
             </div>
             <div class="form-group">
               <label class="form-label">Country</label>
@@ -973,9 +977,10 @@ export class EmployeeProfileComponent implements OnInit {
       error: () => {},
     });
 
-    if (this.isAdmin()) {
-      this.api.employees({ pageSize: 100 }).subscribe({
-        next: (res) => {
+    this.api.employees({ pageSize: 100 }).subscribe({
+      next: (res) => {
+        this.allEmployees.set(res.items);
+        if (this.isAdmin()) {
           const opts: SelectOption[] = [
             { v: '__admin__', l: `👤 My Admin Profile (${this.currentAdminName()})` },
             ...res.items.map((e) => ({
@@ -984,10 +989,12 @@ export class EmployeeProfileComponent implements OnInit {
             })),
           ];
           this.employeeOptions.set(opts);
-        },
-        error: () => {},
-      });
+        }
+      },
+      error: () => {},
+    });
 
+    if (this.isAdmin()) {
       this.route.queryParams.subscribe((params) => {
         const id = params['id'] || params['employeeId'];
         if (id) {
@@ -1117,10 +1124,20 @@ export class EmployeeProfileComponent implements OnInit {
       blood: employee.bloodGroup ?? '',
     });
 
+    let reportsToId = employee.reportingManagerId ?? '';
+    if (!reportsToId && employee.reportingManager) {
+      const match = this.allEmployees().find(
+        (e) => e.fullName.toLowerCase() === employee.reportingManager!.toLowerCase()
+      );
+      if (match) {
+        reportsToId = match.id;
+      }
+    }
+
     this.job.set({
       title: employee.jobTitle,
       dept: employee.department,
-      reportsTo: employee.reportingManager ?? '',
+      reportsTo: reportsToId,
       joinDate: employee.joinDate,
       roleCode: employee.roleCode || (employee.jobTitle.toLowerCase().includes('hr') ? 'HrManager' : 'Employee'),
     });
@@ -1132,6 +1149,7 @@ export class EmployeeProfileComponent implements OnInit {
       emergency: '',
       address: employee.address ?? '',
       city: employee.city ?? '',
+      state: employee.state ?? '',
       country: employee.country ?? '',
     });
 
@@ -1206,19 +1224,34 @@ export class EmployeeProfileComponent implements OnInit {
     const identity = this.identity();
     const bank = this.bank();
 
-    const [firstName, ...rest] = personal.fullName.trim().split(' ');
-    const lastName = rest.join(' ') || detail.lastName;
+    const fullName = personal.fullName.trim();
+    let firstName = detail.firstName;
+    let lastName = detail.lastName;
+    if (fullName) {
+      const parts = fullName.split(/\s+/);
+      firstName = parts[0];
+      lastName = parts.length > 1 ? parts.slice(1).join(' ') : (detail.lastName || parts[0]);
+    }
 
     const body = {
       firstName: firstName || detail.firstName,
       middleName: detail.middleName,
-      lastName,
+      lastName: lastName || detail.lastName,
       email: contact.email || detail.email,
-      phone: contact.phone,
+      phone: contact.phone || null,
+      dateOfBirth: this.toIso(personal.dob),
+      gender: personal.gender || detail.gender || null,
+      maritalStatus: personal.marital || detail.maritalStatus || null,
+      bloodGroup: personal.blood || null,
+      nationality: personal.nationality || null,
+      address: contact.address || null,
+      city: contact.city || null,
+      state: contact.state || detail.state || null,
+      country: contact.country || null,
       departmentId: this.departmentIds.get(job.dept) ?? detail.departmentId,
-      designationId: this.selectedDesignationId() || detail.designationId,
+      designationId: this.selectedDesignationId() || detail.designationId || null,
       branchId: detail.branchId,
-      reportingManagerId: null,
+      reportingManagerId: job.reportsTo ? job.reportsTo : null,
       jobTitle: job.title,
       roleCode: job.roleCode || (job.title.toLowerCase().includes('hr') ? 'HrManager' : 'Employee'),
       grade: detail.grade,
@@ -1232,27 +1265,34 @@ export class EmployeeProfileComponent implements OnInit {
       mobileAllowance: detail.mobileAllowance,
       otherAllowances: detail.otherAllowances,
       currency: bank.currency || detail.currency,
-      bankName: bank.bankName,
-      accountName: bank.accountName,
-      accountNumber: bank.accountNo,
-      iban: bank.iban,
-      ifscCode: bank.ifsc,
-      swiftCode: bank.swift,
-      paymentMode: bank.paymentMode,
-      wpsId: bank.wpsId,
-      passportNumber: identity.passportNo,
+      bankName: bank.bankName || null,
+      accountName: bank.accountName || null,
+      accountNumber: bank.accountNo || null,
+      iban: bank.iban || null,
+      ifscCode: bank.ifsc || null,
+      swiftCode: bank.swift || null,
+      paymentMode: bank.paymentMode || detail.paymentMode,
+      wpsId: bank.wpsId || null,
+      passportNumber: identity.passportNo || null,
       passportExpiry: this.toIso(identity.passportExp),
-      visaNumber: identity.visaNo,
+      visaNumber: identity.visaNo || null,
       visaExpiry: this.toIso(identity.visaExp),
-      emiratesId: identity.emiratesId,
+      emiratesId: identity.emiratesId || null,
     };
 
     this.api.updateEmployee(id, body).subscribe({
       next: (updated) => {
-        this.detail.set(updated);
-        this.toast.show(message);
+        this.populateEmployee(updated);
+        this.employeeOptions.update((opts) =>
+          opts.map((opt) =>
+            opt.v.toLowerCase() === updated.id.toLowerCase()
+              ? { ...opt, l: `${updated.employeeCode} - ${updated.fullName} (${updated.jobTitle || updated.department})` }
+              : opt
+          )
+        );
+        this.toast.show(message, 'success');
       },
-      error: (error) => this.toast.show(error?.error?.title ?? 'Could not save the profile.', 'danger'),
+      error: (error) => this.toast.show(error?.error?.title ?? error?.error?.message ?? 'Could not save the profile.', 'danger'),
     });
   }
 
@@ -1393,6 +1433,7 @@ export class EmployeeProfileComponent implements OnInit {
     emergency: '',
     address: '',
     city: '',
+    state: '',
     country: '',
   });
 
@@ -1435,7 +1476,18 @@ export class EmployeeProfileComponent implements OnInit {
   ];
   protected readonly bloodOptions: SelectOption[] = ['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'].map((b) => ({ v: b, l: b }));
   protected deptOptions: SelectOption[] = [];
-  protected readonly reportingOptions: SelectOption[] = [];
+  protected readonly allEmployees = signal<EmployeeListItem[]>([]);
+  protected readonly reportingOptions = computed<SelectOption[]>(() => {
+    const currentId = (this.apiId() || '').toLowerCase();
+    const list = this.allEmployees().filter((e) => !currentId || e.id.toLowerCase() !== currentId);
+    return [
+      { v: '', l: 'None / Top Level' },
+      ...list.map((e) => ({
+        v: e.id,
+        l: `${e.fullName} (${e.jobTitle || e.department})`,
+      })),
+    ];
+  });
   protected readonly countryOptions: SelectOption[] = [
     { v: 'UAE', l: 'UAE' },
     { v: 'Saudi Arabia', l: 'Saudi Arabia' },
@@ -1484,7 +1536,7 @@ export class EmployeeProfileComponent implements OnInit {
     this.job.update((j) => ({ ...j, [key]: value }));
   }
 
-  protected patchContact(key: 'phone' | 'email' | 'emergency' | 'address' | 'city' | 'country', value: string): void {
+  protected patchContact(key: 'phone' | 'email' | 'emergency' | 'address' | 'city' | 'state' | 'country', value: string): void {
     this.contact.update((c) => ({ ...c, [key]: value }));
   }
 
