@@ -54,3 +54,10 @@ dist/
 
 # IDE
 .vscode/
+
+# Uploaded documents & files (managed at runtime)
+uploads/
+**/uploads/
+wwwroot/uploads/
+**/wwwroot/uploads/
+
