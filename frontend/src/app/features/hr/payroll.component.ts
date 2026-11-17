@@ -9,6 +9,8 @@ import { ToastService } from '../../core/services/toast.service';
 import { UiService } from '../../core/services/ui.service';
 
 export interface ComprehensivePayrollRow {
+  id?: string;
+  employeeGuid?: string;
   empId: string;
   name: string;
   department: string;
@@ -65,34 +67,10 @@ export interface ComprehensivePayrollRow {
     <!-- Payroll Tabs -->
     <div class="tabs-nav-bar" style="display: flex; gap: 8px; border-bottom: 1px solid var(--border); margin-bottom: 20px;">
       <button 
-        class="tab-btn" 
-        [class.active]="tab() === 'monthly'" 
-        (click)="tab.set('monthly')"
-        style="padding: 10px 18px; font-weight: 700; font-size: 13px; border: none; background: transparent; cursor: pointer; border-bottom: 2.5px solid transparent;"
-        [style.border-bottom-color]="tab() === 'monthly' ? 'var(--p)' : 'transparent'"
-        [style.color]="tab() === 'monthly' ? 'var(--p)' : 'var(--muted)'"
+        class="tab-btn active" 
+        style="padding: 10px 18px; font-weight: 700; font-size: 13px; border: none; background: transparent; cursor: pointer; border-bottom: 2.5px solid var(--p); color: var(--p);"
       >
         Monthly Payroll
-      </button>
-      <button 
-        class="tab-btn" 
-        [class.active]="tab() === 'hourly'" 
-        (click)="tab.set('hourly')"
-        style="padding: 10px 18px; font-weight: 700; font-size: 13px; border: none; background: transparent; cursor: pointer; border-bottom: 2.5px solid transparent;"
-        [style.border-bottom-color]="tab() === 'hourly' ? 'var(--p)' : 'transparent'"
-        [style.color]="tab() === 'hourly' ? 'var(--p)' : 'var(--muted)'"
-      >
-        Hourly Payroll
-      </button>
-      <button 
-        class="tab-btn" 
-        [class.active]="tab() === 'attendance'" 
-        (click)="tab.set('attendance')"
-        style="padding: 10px 18px; font-weight: 700; font-size: 13px; border: none; background: transparent; cursor: pointer; border-bottom: 2.5px solid transparent;"
-        [style.border-bottom-color]="tab() === 'attendance' ? 'var(--p)' : 'transparent'"
-        [style.color]="tab() === 'attendance' ? 'var(--p)' : 'var(--muted)'"
-      >
-        Attendance &amp; LOP Register
       </button>
     </div>
 
@@ -107,12 +85,14 @@ export interface ComprehensivePayrollRow {
             class="form-control" 
             placeholder="Search employee or code..." 
             style="width: 200px; font-size: 12px; padding: 6px 10px;"
-            [(ngModel)]="searchKeyword"
+            [ngModel]="searchKeyword()"
+            (ngModelChange)="searchKeyword.set($event)"
           />
           <select 
             class="form-control" 
             style="width: 140px; font-size: 12px; padding: 6px 10px;"
-            [(ngModel)]="selectedDept"
+            [ngModel]="selectedDept()"
+            (ngModelChange)="selectedDept.set($event)"
           >
             <option value="">All Departments</option>
             <option value="Engineering">Engineering</option>
@@ -126,8 +106,8 @@ export interface ComprehensivePayrollRow {
             type="month" 
             class="form-control" 
             style="width: 140px; font-size: 12px; padding: 6px 10px;"
-            [(ngModel)]="selectedMonth" 
-            (change)="onMonthChange()"
+            [ngModel]="selectedMonth()" 
+            (ngModelChange)="onMonthChange($event)"
           />
         </div>
       </div>
@@ -183,9 +163,14 @@ export interface ComprehensivePayrollRow {
                   <span class="badge" [class]="statusClass(r.status)">{{ r.status }}</span>
                 </td>
                 <td>
-                  <button class="btn btn-ghost btn-sm" (click)="openPayslip(r)" data-tooltip="View Payslip">
-                    <span [appIcon]="'receipt'"></span>
-                  </button>
+                  <div style="display: flex; gap: 4px; align-items: center;">
+                    <button class="btn btn-ghost btn-sm" (click)="openPayslip(r)" data-tooltip="View Payslip">
+                      <span [appIcon]="'receipt'"></span>
+                    </button>
+                    <button class="btn btn-ghost btn-sm" [disabled]="downloadingSlip()" (click)="downloadPayslip(r)" data-tooltip="Download PDF">
+                      <span [appIcon]="'download'"></span>
+                    </button>
+                  </div>
                 </td>
               </tr>
             } @empty {
@@ -282,7 +267,9 @@ export interface ComprehensivePayrollRow {
           </div>
           <div class="modal-footer">
             <button class="btn btn-outline" (click)="selectedRow.set(null)">Close</button>
-            <button class="btn btn-primary" (click)="downloadModalPayslip()">Download PDF</button>
+            <button class="btn btn-primary" [disabled]="downloadingSlip()" (click)="downloadModalPayslip()">
+              <span [appIcon]="'download'"></span> {{ downloadingSlip() ? 'Downloading...' : 'Download PDF' }}
+            </button>
           </div>
         </div>
       </div>
@@ -295,14 +282,15 @@ export class PayrollComponent implements OnInit {
   protected readonly perms = inject(PermissionService);
   private readonly api = inject(ApiService);
 
-  protected readonly tab = signal<'monthly' | 'hourly' | 'attendance'>('monthly');
+  protected readonly tab = signal<'monthly'>('monthly');
   protected readonly showRunModal = signal(false);
   protected readonly runningPayroll = signal(false);
+  protected readonly downloadingSlip = signal(false);
   protected readonly selectedRow = signal<ComprehensivePayrollRow | null>(null);
 
-  protected searchKeyword = '';
-  protected selectedDept = '';
-  protected selectedMonth = new Date().toISOString().slice(0, 7);
+  protected readonly searchKeyword = signal('');
+  protected readonly selectedDept = signal('');
+  protected readonly selectedMonth = signal(new Date().toISOString().slice(0, 7));
 
   protected runForm = {
     month: new Date().toISOString().slice(0, 7),
@@ -320,7 +308,7 @@ export class PayrollComponent implements OnInit {
   protected readonly rows = signal<ComprehensivePayrollRow[]>([]);
 
   protected readonly activeMonthLabel = computed(() => {
-    const parts = this.selectedMonth.split('-');
+    const parts = this.selectedMonth().split('-');
     const year = parts[0];
     const month = parseInt(parts[1], 10) || 1;
     const name = new Date(parseInt(year, 10), month - 1, 1).toLocaleDateString('en-US', { month: 'long' });
@@ -328,11 +316,15 @@ export class PayrollComponent implements OnInit {
   });
 
   protected readonly filteredRows = computed(() => {
-    const q = this.searchKeyword.toLowerCase().trim();
-    const d = this.selectedDept;
+    const q = this.searchKeyword().toLowerCase().trim();
+    const d = this.selectedDept().toLowerCase().trim();
     return this.rows().filter((r) => {
-      const matchQ = !q || r.name.toLowerCase().includes(q) || r.empId.toLowerCase().includes(q);
-      const matchD = !d || r.department === d;
+      const matchQ =
+        !q ||
+        r.name.toLowerCase().includes(q) ||
+        r.empId.toLowerCase().includes(q) ||
+        r.designation.toLowerCase().includes(q);
+      const matchD = !d || r.department.toLowerCase() === d;
       return matchQ && matchD;
     });
   });
@@ -341,13 +333,16 @@ export class PayrollComponent implements OnInit {
     this.loadBackendPayroll();
   }
 
-  protected onMonthChange(): void {
+  protected onMonthChange(newMonth?: string): void {
+    if (newMonth) {
+      this.selectedMonth.set(newMonth);
+    }
     this.loadBackendPayroll();
     this.toast.show(`Loaded payroll register for ${this.activeMonthLabel()}`);
   }
 
   private loadBackendPayroll(): void {
-    const [yearStr, monthStr] = this.selectedMonth.split('-');
+    const [yearStr, monthStr] = this.selectedMonth().split('-');
     const year = parseInt(yearStr, 10) || new Date().getFullYear();
     const month = parseInt(monthStr, 10) || (new Date().getMonth() + 1);
 
@@ -381,7 +376,7 @@ export class PayrollComponent implements OnInit {
           });
         } else {
           // Check localStorage for offline processed run
-          const local = localStorage.getItem('hrms_payroll_' + this.selectedMonth);
+          const local = localStorage.getItem('hrms_payroll_' + this.selectedMonth());
           if (local) {
             try {
               const parsed = JSON.parse(local);
@@ -397,7 +392,7 @@ export class PayrollComponent implements OnInit {
         }
       },
       error: () => {
-        const local = localStorage.getItem('hrms_payroll_' + this.selectedMonth);
+        const local = localStorage.getItem('hrms_payroll_' + this.selectedMonth());
         if (local) {
           try {
             const parsed = JSON.parse(local);
@@ -415,6 +410,8 @@ export class PayrollComponent implements OnInit {
 
   private applyPayslips(payslips: Payslip[]): void {
     const mapped: ComprehensivePayrollRow[] = payslips.map((p) => ({
+      id: p.id,
+      employeeGuid: p.employeeId,
       empId: p.employeeId ? p.employeeId.slice(0, 8).toUpperCase() : 'EMP-001',
       name: p.employeeName || 'Employee',
       department: p.department || 'Operations',
@@ -446,6 +443,7 @@ export class PayrollComponent implements OnInit {
             const allowances = Math.round(basic * 0.25);
             const deductions = 250;
             return {
+              employeeGuid: e.id,
               empId: e.employeeCode || `EMP-10${idx + 1}`,
               name: e.fullName,
               department: e.department || 'Engineering',
@@ -510,10 +508,46 @@ export class PayrollComponent implements OnInit {
     this.selectedRow.set(r);
   }
 
+  protected downloadPayslip(r: ComprehensivePayrollRow): void {
+    const [yearStr, monthStr] = this.selectedMonth().split('-');
+    const year = parseInt(yearStr, 10) || new Date().getFullYear();
+    const month = parseInt(monthStr, 10) || (new Date().getMonth() + 1);
+
+    this.downloadingSlip.set(true);
+    this.toast.show(`Downloading payslip PDF for ${r.name}...`);
+
+    this.api
+      .downloadPayslip({
+        payslipId: r.id,
+        employeeId: r.employeeGuid,
+        employeeCode: r.empId,
+        month,
+        year,
+      })
+      .subscribe({
+        next: (blob) => {
+          this.downloadingSlip.set(false);
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `Payslip_${r.empId}_${this.selectedMonth()}.pdf`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          this.toast.show(`Payslip downloaded for ${r.name}!`, 'success');
+        },
+        error: (err) => {
+          this.downloadingSlip.set(false);
+          this.toast.show(`Failed to download payslip: ${err?.message || 'Server error'}`, 'danger');
+        },
+      });
+  }
+
   protected downloadModalPayslip(): void {
     const r = this.selectedRow();
     if (!r) return;
-    this.toast.show(`Downloading payslip PDF for ${r.name}...`);
+    this.downloadPayslip(r);
     this.selectedRow.set(null);
   }
 
@@ -540,7 +574,7 @@ export class PayrollComponent implements OnInit {
       next: (run) => {
         this.runningPayroll.set(false);
         this.showRunModal.set(false);
-        this.selectedMonth = this.runForm.month;
+        this.selectedMonth.set(this.runForm.month);
         this.toast.show(`Payroll for ${this.runForm.month} processed successfully!`, 'success');
 
         this.api.payslipsForRun(run.id).subscribe({
@@ -557,7 +591,7 @@ export class PayrollComponent implements OnInit {
       error: (err) => {
         this.runningPayroll.set(false);
         this.showRunModal.set(false);
-        this.selectedMonth = this.runForm.month;
+        this.selectedMonth.set(this.runForm.month);
 
         if (err?.status === 409) {
           this.toast.show(`Payroll for ${this.runForm.month} was already recorded in database. Loading payslips...`, 'info');
@@ -576,7 +610,7 @@ export class PayrollComponent implements OnInit {
     this.rows.set(updated);
     this.updateKpisFromRows(updated);
     try {
-      localStorage.setItem('hrms_payroll_' + this.selectedMonth, JSON.stringify(updated));
+      localStorage.setItem('hrms_payroll_' + this.selectedMonth(), JSON.stringify(updated));
     } catch {}
   }
 
@@ -622,7 +656,7 @@ export class PayrollComponent implements OnInit {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Payroll_${this.selectedMonth}.csv`;
+    a.download = `Payroll_${this.selectedMonth()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     this.toast.show('Payroll Register exported to CSV');

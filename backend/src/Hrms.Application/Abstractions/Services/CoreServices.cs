@@ -120,4 +120,12 @@ public interface IPayrollService
     Task<IReadOnlyList<PayslipDto>> GetPayslipsForEmployeeAsync(Guid employeeId, CancellationToken ct = default);
 
     Task<PayrollRunDto> RunPayrollAsync(RunPayrollRequest request, CancellationToken ct = default);
+
+    Task<(byte[] Content, string FileName)> DownloadPayslipPdfAsync(
+        Guid? payslipId = null,
+        Guid? employeeId = null,
+        string? employeeCode = null,
+        int? month = null,
+        int? year = null,
+        CancellationToken ct = default);
 }

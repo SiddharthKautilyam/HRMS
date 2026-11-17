@@ -307,6 +307,25 @@ export class ApiService {
     return this.http.post<PayrollRun>(this.url('/payroll/run'), body);
   }
 
+  downloadPayslip(params: {
+    payslipId?: string;
+    employeeId?: string;
+    employeeCode?: string;
+    month?: number;
+    year?: number;
+  }): Observable<Blob> {
+    return this.http.get(this.url('/payroll/download-slip'), {
+      params: toParams(params),
+      responseType: 'blob',
+    });
+  }
+
+  downloadPayslipById(id: string): Observable<Blob> {
+    return this.http.get(this.url(`/payroll/payslips/${id}/download`), {
+      responseType: 'blob',
+    });
+  }
+
   // ── Loans ──
   loans(status?: string): Observable<Loan[]> {
     return this.http.get<Loan[]>(this.url('/loans'), { params: toParams({ status }) });
