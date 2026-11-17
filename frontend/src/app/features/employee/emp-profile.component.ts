@@ -573,61 +573,65 @@ export class EmpProfileComponent implements OnInit {
   private load(): void {
     this.api.employeeMe().subscribe({
       next: (employee) => {
-        this.detail.set(employee);
-        this.apiId.set(employee.id);
-
-        this.personal.set({
-          fullName: employee.fullName,
-          dob: employee.dateOfBirth ?? '',
-          gender: employee.gender,
-          nationality: employee.nationality ?? '',
-          marital: employee.maritalStatus,
-          blood: employee.bloodGroup ?? '',
-        });
-
-        this.job.set({
-          title: employee.jobTitle,
-          dept: employee.department,
-          reportsTo: employee.reportingManager ?? '',
-          joinDate: employee.joinDate,
-        });
-
-        this.contact.set({
-          phone: employee.phone ?? '',
-          email: employee.email,
-          emergencyName: '',
-          emergencyPhone: '',
-          address: employee.address ?? '',
-          city: employee.city ?? '',
-          country: employee.country ?? '',
-        });
-
-        this.identity.set({
-          passportNo: employee.passportNumber ?? '',
-          passportExp: employee.passportExpiry ?? '',
-          visaNo: employee.visaNumber ?? '',
-          visaExp: employee.visaExpiry ?? '',
-          emiratesId: employee.emiratesId ?? '',
-        });
-
-        this.bank.set({
-          bankName: employee.bankName ?? '',
-          accountName: employee.accountName ?? '',
-          accountNo: employee.accountNumber ?? '',
-          iban: employee.iban ?? '',
-          ifsc: employee.ifscCode ?? '',
-          swift: employee.swiftCode ?? '',
-          currency: employee.currency,
-          paymentMode: employee.paymentMode,
-          wpsId: employee.wpsId ?? '',
-        });
-
-        this.loadDocuments(employee.id);
+        this.populateEmployee(employee);
       },
       error: () => {
         this.toast.show('Could not load your profile.', 'danger');
       },
     });
+  }
+
+  private populateEmployee(employee: EmployeeDetail): void {
+    this.detail.set(employee);
+    this.apiId.set(employee.id);
+
+    this.personal.set({
+      fullName: employee.fullName,
+      dob: employee.dateOfBirth ?? '',
+      gender: employee.gender,
+      nationality: employee.nationality ?? '',
+      marital: employee.maritalStatus,
+      blood: employee.bloodGroup ?? '',
+    });
+
+    this.job.set({
+      title: employee.jobTitle,
+      dept: employee.department,
+      reportsTo: employee.reportingManager ?? '',
+      joinDate: employee.joinDate,
+    });
+
+    this.contact.set({
+      phone: employee.phone ?? '',
+      email: employee.email,
+      emergencyName: '',
+      emergencyPhone: '',
+      address: employee.address ?? '',
+      city: employee.city ?? '',
+      country: employee.country ?? '',
+    });
+
+    this.identity.set({
+      passportNo: employee.passportNumber ?? '',
+      passportExp: employee.passportExpiry ?? '',
+      visaNo: employee.visaNumber ?? '',
+      visaExp: employee.visaExpiry ?? '',
+      emiratesId: employee.emiratesId ?? '',
+    });
+
+    this.bank.set({
+      bankName: employee.bankName ?? '',
+      accountName: employee.accountName ?? '',
+      accountNo: employee.accountNumber ?? '',
+      iban: employee.iban ?? '',
+      ifsc: employee.ifscCode ?? '',
+      swift: employee.swiftCode ?? '',
+      currency: employee.currency,
+      paymentMode: employee.paymentMode,
+      wpsId: employee.wpsId ?? '',
+    });
+
+    this.loadDocuments(employee.id);
   }
 
   private loadDocuments(employeeId: string): void {
@@ -662,20 +666,35 @@ export class EmpProfileComponent implements OnInit {
     const identity = this.identity();
     const bank = this.bank();
 
-    const [firstName, ...rest] = personal.fullName.trim().split(' ');
-    const lastName = rest.join(' ') || detail.lastName;
+    const fullName = personal.fullName.trim();
+    let firstName = detail.firstName;
+    let lastName = detail.lastName;
+    if (fullName) {
+      const parts = fullName.split(/\s+/);
+      firstName = parts[0];
+      lastName = parts.length > 1 ? parts.slice(1).join(' ') : (detail.lastName || parts[0]);
+    }
 
     this.api
       .updateEmployee(id, {
         firstName: firstName || detail.firstName,
         middleName: detail.middleName,
-        lastName,
+        lastName: lastName || detail.lastName,
         email: contact.email || detail.email,
-        phone: contact.phone,
+        phone: contact.phone || null,
+        dateOfBirth: this.toIso(personal.dob),
+        gender: personal.gender || detail.gender || null,
+        maritalStatus: personal.marital || detail.maritalStatus || null,
+        bloodGroup: personal.blood || null,
+        nationality: personal.nationality || null,
+        address: contact.address || null,
+        city: contact.city || null,
+        state: detail.state || null,
+        country: contact.country || null,
         departmentId: this.departmentIds.get(job.dept) ?? detail.departmentId,
         designationId: detail.designationId,
         branchId: detail.branchId,
-        reportingManagerId: null,
+        reportingManagerId: detail.reportingManagerId ?? null,
         jobTitle: job.title,
         grade: detail.grade,
         employmentType: detail.employmentType,
@@ -688,26 +707,26 @@ export class EmpProfileComponent implements OnInit {
         mobileAllowance: detail.mobileAllowance,
         otherAllowances: detail.otherAllowances,
         currency: bank.currency || detail.currency,
-        bankName: bank.bankName,
-        accountName: bank.accountName,
-        accountNumber: bank.accountNo,
-        iban: bank.iban,
-        ifscCode: bank.ifsc,
-        swiftCode: bank.swift,
-        paymentMode: bank.paymentMode,
-        wpsId: bank.wpsId,
-        passportNumber: identity.passportNo,
+        bankName: bank.bankName || null,
+        accountName: bank.accountName || null,
+        accountNumber: bank.accountNo || null,
+        iban: bank.iban || null,
+        ifscCode: bank.ifsc || null,
+        swiftCode: bank.swift || null,
+        paymentMode: bank.paymentMode || detail.paymentMode,
+        wpsId: bank.wpsId || null,
+        passportNumber: identity.passportNo || null,
         passportExpiry: this.toIso(identity.passportExp),
-        visaNumber: identity.visaNo,
+        visaNumber: identity.visaNo || null,
         visaExpiry: this.toIso(identity.visaExp),
-        emiratesId: identity.emiratesId,
+        emiratesId: identity.emiratesId || null,
       })
       .subscribe({
         next: (updated) => {
-          this.detail.set(updated);
-          this.toast.show(message);
+          this.populateEmployee(updated);
+          this.toast.show(message, 'success');
         },
-        error: (error) => this.toast.show(error?.error?.title ?? 'Could not save your profile.', 'danger'),
+        error: (error) => this.toast.show(error?.error?.title ?? error?.error?.message ?? 'Could not save your profile.', 'danger'),
       });
   }
 

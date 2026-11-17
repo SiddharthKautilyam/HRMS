@@ -99,6 +99,7 @@ public sealed class EmployeeService : IEmployeeService
             Gender = request.Gender ?? Gender.Female,
             MaritalStatus = request.MaritalStatus ?? MaritalStatus.Single,
             BloodGroup = string.IsNullOrWhiteSpace(request.BloodGroup) ? null : request.BloodGroup.Trim(),
+            Nationality = string.IsNullOrWhiteSpace(request.Nationality) ? null : request.Nationality.Trim(),
             Address = string.IsNullOrWhiteSpace(request.Address) ? null : request.Address.Trim(),
             City = string.IsNullOrWhiteSpace(request.City) ? null : request.City.Trim(),
             State = string.IsNullOrWhiteSpace(request.State) ? null : request.State.Trim(),
@@ -175,10 +176,19 @@ public sealed class EmployeeService : IEmployeeService
             ?? throw NotFoundException.For("Department", request.DepartmentId);
 
         employee.FirstName = request.FirstName.Trim();
-        employee.MiddleName = request.MiddleName?.Trim();
+        employee.MiddleName = string.IsNullOrWhiteSpace(request.MiddleName) ? null : request.MiddleName.Trim();
         employee.LastName = request.LastName.Trim();
         employee.Email = email;
-        employee.Phone = request.Phone;
+        employee.Phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
+        employee.DateOfBirth = request.DateOfBirth;
+        if (request.Gender.HasValue) employee.Gender = request.Gender.Value;
+        if (request.MaritalStatus.HasValue) employee.MaritalStatus = request.MaritalStatus.Value;
+        employee.BloodGroup = string.IsNullOrWhiteSpace(request.BloodGroup) ? null : request.BloodGroup.Trim();
+        employee.Nationality = string.IsNullOrWhiteSpace(request.Nationality) ? null : request.Nationality.Trim();
+        employee.Address = string.IsNullOrWhiteSpace(request.Address) ? null : request.Address.Trim();
+        employee.City = string.IsNullOrWhiteSpace(request.City) ? null : request.City.Trim();
+        employee.State = string.IsNullOrWhiteSpace(request.State) ? null : request.State.Trim();
+        employee.Country = string.IsNullOrWhiteSpace(request.Country) ? null : request.Country.Trim();
         employee.DepartmentId = request.DepartmentId;
         employee.DesignationId = request.DesignationId;
         employee.BranchId = request.BranchId;
@@ -195,25 +205,36 @@ public sealed class EmployeeService : IEmployeeService
         employee.MobileAllowance = request.MobileAllowance;
         employee.OtherAllowances = request.OtherAllowances;
         employee.Currency = request.Currency;
-        employee.BankName = request.BankName;
-        employee.AccountName = request.AccountName;
-        employee.AccountNumber = request.AccountNumber;
-        employee.Iban = request.Iban;
-        employee.IfscCode = request.IfscCode;
-        employee.SwiftCode = request.SwiftCode;
+        employee.BankName = string.IsNullOrWhiteSpace(request.BankName) ? null : request.BankName.Trim();
+        employee.AccountName = string.IsNullOrWhiteSpace(request.AccountName) ? null : request.AccountName.Trim();
+        employee.AccountNumber = string.IsNullOrWhiteSpace(request.AccountNumber) ? null : request.AccountNumber.Trim();
+        employee.Iban = string.IsNullOrWhiteSpace(request.Iban) ? null : request.Iban.Trim();
+        employee.IfscCode = string.IsNullOrWhiteSpace(request.IfscCode) ? null : request.IfscCode.Trim();
+        employee.SwiftCode = string.IsNullOrWhiteSpace(request.SwiftCode) ? null : request.SwiftCode.Trim();
         employee.PaymentMode = request.PaymentMode;
-        employee.WpsId = request.WpsId;
-        employee.PassportNumber = request.PassportNumber;
+        employee.WpsId = string.IsNullOrWhiteSpace(request.WpsId) ? null : request.WpsId.Trim();
+        employee.PassportNumber = string.IsNullOrWhiteSpace(request.PassportNumber) ? null : request.PassportNumber.Trim();
         employee.PassportExpiry = request.PassportExpiry;
-        employee.VisaNumber = request.VisaNumber;
+        employee.VisaNumber = string.IsNullOrWhiteSpace(request.VisaNumber) ? null : request.VisaNumber.Trim();
         employee.VisaExpiry = request.VisaExpiry;
-        employee.EmiratesId = request.EmiratesId;
-
-        if (!string.IsNullOrWhiteSpace(request.RoleCode))
+        employee.EmiratesId = string.IsNullOrWhiteSpace(request.EmiratesId) ? null : request.EmiratesId.Trim();
+        if (!string.IsNullOrWhiteSpace(request.FacePhotoUrl))
         {
-            var linkedUser = await _uow.Users.FirstOrDefaultAsync(
-                _uow.Users.Query().Where(u => u.EmployeeId == employee.Id || u.Email == employee.Email), ct);
-            if (linkedUser is not null)
+            employee.FacePhotoUrl = request.FacePhotoUrl.Trim();
+        }
+
+        var linkedUser = await _uow.Users.FirstOrDefaultAsync(
+            _uow.Users.Query().Where(u => u.EmployeeId == employee.Id || u.Email == employee.Email), ct);
+        if (linkedUser is not null)
+        {
+            linkedUser.FullName = $"{employee.FirstName} {employee.LastName}".Trim();
+            var firstInitial = employee.FirstName.Length > 0 ? employee.FirstName[0] : 'E';
+            var lastInitial = employee.LastName.Length > 0 ? employee.LastName[0] : 'M';
+            linkedUser.Initials = $"{firstInitial}{lastInitial}".Trim().ToUpperInvariant();
+            linkedUser.Email = email;
+            linkedUser.NormalizedEmail = email.ToUpperInvariant();
+
+            if (!string.IsNullOrWhiteSpace(request.RoleCode))
             {
                 var target = request.RoleCode.Trim();
                 var role = await _uow.Roles.FirstOrDefaultAsync(
@@ -221,15 +242,9 @@ public sealed class EmployeeService : IEmployeeService
                 if (role is not null)
                 {
                     linkedUser.RoleId = role.Id;
-                    _uow.Users.Update(linkedUser);
                 }
             }
-        }
-        else if (request.JobTitle.Contains("HR", StringComparison.OrdinalIgnoreCase))
-        {
-            var linkedUser = await _uow.Users.FirstOrDefaultAsync(
-                _uow.Users.Query().Where(u => u.EmployeeId == employee.Id || u.Email == employee.Email), ct);
-            if (linkedUser is not null)
+            else if (request.JobTitle.Contains("HR", StringComparison.OrdinalIgnoreCase))
             {
                 var currentRole = await _uow.Roles.GetByIdAsync(linkedUser.RoleId, ct);
                 if (currentRole != null && currentRole.Code.Equals("Employee", StringComparison.OrdinalIgnoreCase))
@@ -239,10 +254,11 @@ public sealed class EmployeeService : IEmployeeService
                     if (hrRole is not null)
                     {
                         linkedUser.RoleId = hrRole.Id;
-                        _uow.Users.Update(linkedUser);
                     }
                 }
             }
+
+            _uow.Users.Update(linkedUser);
         }
 
         _uow.Employees.Update(employee);
@@ -343,6 +359,7 @@ public sealed class EmployeeService : IEmployeeService
         e.Designation?.Name,
         e.BranchId,
         e.Branch?.Name,
+        e.ReportingManagerId,
         e.ReportingManager is null ? null : $"{e.ReportingManager.FirstName} {e.ReportingManager.LastName}".Trim(),
         e.JobTitle,
         e.Grade,

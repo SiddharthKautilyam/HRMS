@@ -78,6 +78,7 @@ export interface EmployeeDetail {
   designation?: string | null;
   branchId?: string | null;
   branch?: string | null;
+  reportingManagerId?: string | null;
   reportingManager?: string | null;
   jobTitle: string;
   grade: string;
