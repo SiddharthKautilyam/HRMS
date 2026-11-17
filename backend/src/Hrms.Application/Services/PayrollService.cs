@@ -351,6 +351,7 @@ public sealed class PayrollService : IPayrollService
             p.NetPay,
             p.WorkingDays,
             p.Status.ToString(),
-            p.PayDate);
+            p.PayDate,
+            p.Employee?.EmployeeCode);
     }
 }

@@ -28,7 +28,8 @@ public sealed record PayslipDto(
     decimal NetPay,
     int WorkingDays,
     string Status,
-    DateOnly PayDate);
+    DateOnly PayDate,
+    string? EmployeeCode = null);
 
 public sealed record RunPayrollRequest(
     [Range(1, 12)] int Month,

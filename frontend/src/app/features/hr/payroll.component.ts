@@ -1,6 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
+import jsPDF from 'jspdf';
 import { ApiService } from '../../core/api/api.service';
 import { Payslip } from '../../core/api/api.models';
 import { IconDirective } from '../../core/icons/icon.directive';
@@ -9,9 +11,8 @@ import { ToastService } from '../../core/services/toast.service';
 import { UiService } from '../../core/services/ui.service';
 
 export interface ComprehensivePayrollRow {
-  id?: string;
-  employeeGuid?: string;
   empId: string;
+  fullEmpId?: string;
   name: string;
   department: string;
   designation: string;
@@ -34,11 +35,7 @@ export interface ComprehensivePayrollRow {
   selector: 'app-payroll',
   imports: [CommonModule, FormsModule, IconDirective],
   template: `
-    <div class="flex justify-between items-center" style="margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
-      <div>
-        <div class="page-title">Payroll Processing</div>
-        <div class="page-subtitle">{{ activeMonthLabel() }} · {{ filteredRows().length }} Employees in Register</div>
-      </div>
+    <div class="flex justify-end items-center" style="margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
       <div class="flex gap-2">
         <button class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 6px;" (click)="exportCsv()">
           <span [appIcon]="'download'"></span> Export CSV
@@ -64,11 +61,11 @@ export interface ComprehensivePayrollRow {
       }
     </div>
 
-    <!-- Payroll Tabs -->
+    <!-- Payroll Tabs (Hourly Payroll and Attendance & LOP removed as requested) -->
     <div class="tabs-nav-bar" style="display: flex; gap: 8px; border-bottom: 1px solid var(--border); margin-bottom: 20px;">
       <button 
         class="tab-btn active" 
-        style="padding: 10px 18px; font-weight: 700; font-size: 13px; border: none; background: transparent; cursor: pointer; border-bottom: 2.5px solid var(--p); color: var(--p);"
+        style="padding: 10px 18px; font-weight: 700; font-size: 13px; border: none; background: transparent; cursor: default; border-bottom: 2.5px solid var(--p); color: var(--p);"
       >
         Monthly Payroll
       </button>
@@ -80,19 +77,58 @@ export interface ComprehensivePayrollRow {
         <div class="card-title">Payroll Register</div>
         
         <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-          <input 
-            type="text" 
-            class="form-control" 
-            placeholder="Search employee or code..." 
-            style="width: 200px; font-size: 12px; padding: 6px 10px;"
-            [ngModel]="searchKeyword()"
-            (ngModelChange)="searchKeyword.set($event)"
-          />
+          <!-- Hidden anti-autofill decoys to trap password manager autofill -->
+          <input type="text" style="display:none" aria-hidden="true" autocomplete="username" tabindex="-1" />
+          <input type="password" style="display:none" aria-hidden="true" autocomplete="current-password" tabindex="-1" />
+
+          <!-- Instant Search Input with Icon and Clear Button -->
+          <div style="position: relative; display: flex; align-items: center;">
+            <span style="position: absolute; left: 10px; color: var(--muted); pointer-events: none; display: flex;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            </span>
+            <input 
+              #searchInput
+              type="search" 
+              id="payroll_search_filter_query"
+              name="payroll_search_filter_query"
+              class="form-control" 
+              placeholder="Search employee or code..." 
+              style="width: 220px; font-size: 12px; padding: 6px 28px 6px 30px;"
+              [value]="searchKeyword()"
+              [readOnly]="isSearchReadonly()"
+              (focus)="enableSearchEdit()"
+              (pointerdown)="enableSearchEdit()"
+              (keydown)="onSearchKeydown()"
+              (input)="onSearchInput($any($event.target).value, $event)"
+              (change)="onSearchInput($any($event.target).value, $event)"
+              (search)="onSearchInput($any($event.target).value, $event)"
+              autocomplete="new-password"
+              autocorrect="off"
+              autocapitalize="off"
+              spellcheck="false"
+              data-lpignore="true"
+              data-1p-ignore="true"
+              data-bwignore="true"
+              data-form-type="other"
+              role="searchbox"
+            />
+            @if (searchKeyword()) {
+              <button 
+                type="button" 
+                (click)="clearSearch()"
+                style="position: absolute; right: 8px; background: none; border: none; font-size: 13px; cursor: pointer; color: var(--muted); padding: 2px 4px; display: flex; align-items: center;"
+                title="Clear search"
+              >
+                ✕
+              </button>
+            }
+          </div>
+
           <select 
             class="form-control" 
             style="width: 140px; font-size: 12px; padding: 6px 10px;"
-            [ngModel]="selectedDept()"
-            (ngModelChange)="selectedDept.set($event)"
+            [value]="selectedDept()"
+            (change)="selectedDept.set($any($event.target).value)"
           >
             <option value="">All Departments</option>
             <option value="Engineering">Engineering</option>
@@ -106,8 +142,8 @@ export interface ComprehensivePayrollRow {
             type="month" 
             class="form-control" 
             style="width: 140px; font-size: 12px; padding: 6px 10px;"
-            [ngModel]="selectedMonth()" 
-            (ngModelChange)="onMonthChange($event)"
+            [value]="selectedMonth()" 
+            (change)="onMonthChange($any($event.target).value)"
           />
         </div>
       </div>
@@ -134,7 +170,7 @@ export interface ComprehensivePayrollRow {
             </tr>
           </thead>
           <tbody>
-            @for (r of filteredRows(); track r.empId) {
+            @for (r of filteredRows(); track (r.empId + '_' + r.name + '_' + $index)) {
               <tr>
                 <td>
                   <div class="table-avatar">
@@ -163,14 +199,9 @@ export interface ComprehensivePayrollRow {
                   <span class="badge" [class]="statusClass(r.status)">{{ r.status }}</span>
                 </td>
                 <td>
-                  <div style="display: flex; gap: 4px; align-items: center;">
-                    <button class="btn btn-ghost btn-sm" (click)="openPayslip(r)" data-tooltip="View Payslip">
-                      <span [appIcon]="'receipt'"></span>
-                    </button>
-                    <button class="btn btn-ghost btn-sm" [disabled]="downloadingSlip()" (click)="downloadPayslip(r)" data-tooltip="Download PDF">
-                      <span [appIcon]="'download'"></span>
-                    </button>
-                  </div>
+                  <button class="btn btn-ghost btn-sm" (click)="openPayslip(r)" data-tooltip="View Payslip">
+                    <span [appIcon]="'receipt'"></span>
+                  </button>
                 </td>
               </tr>
             } @empty {
@@ -265,28 +296,58 @@ export interface ComprehensivePayrollRow {
               </div>
             </div>
           </div>
-          <div class="modal-footer">
+          <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
             <button class="btn btn-outline" (click)="selectedRow.set(null)">Close</button>
-            <button class="btn btn-primary" [disabled]="downloadingSlip()" (click)="downloadModalPayslip()">
-              <span [appIcon]="'download'"></span> {{ downloadingSlip() ? 'Downloading...' : 'Download PDF' }}
-            </button>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-outline" (click)="openFullPayslip(selectedRow()!)">View Full Payslip</button>
+              <button class="btn btn-primary" (click)="downloadModalPayslip()">Download PDF</button>
+            </div>
           </div>
         </div>
       </div>
     }
-  `
+  `,
+  styles: [
+    `
+      input[type="search"]::-webkit-search-decoration,
+      input[type="search"]::-webkit-search-cancel-button,
+      input[type="search"]::-webkit-search-results-button,
+      input[type="search"]::-webkit-search-results-decoration {
+        -webkit-appearance: none;
+        appearance: none;
+        display: none !important;
+      }
+      input[type="search"]::-ms-clear,
+      input[type="search"]::-ms-reveal {
+        display: none !important;
+        width: 0 !important;
+        height: 0 !important;
+      }
+    `,
+  ],
 })
-export class PayrollComponent implements OnInit {
+export class PayrollComponent implements OnInit, AfterViewInit {
   protected readonly ui = inject(UiService);
   protected readonly toast = inject(ToastService);
   protected readonly perms = inject(PermissionService);
   private readonly api = inject(ApiService);
+  private readonly router = inject(Router);
 
   protected readonly tab = signal<'monthly'>('monthly');
   protected readonly showRunModal = signal(false);
   protected readonly runningPayroll = signal(false);
-  protected readonly downloadingSlip = signal(false);
   protected readonly selectedRow = signal<ComprehensivePayrollRow | null>(null);
+
+  protected readonly isSearchReadonly = signal(true);
+  private userInteracted = false;
+
+  @ViewChild('searchInput') set searchInputSetter(ref: ElementRef<HTMLInputElement> | undefined) {
+    this.searchInputRef = ref;
+    if (ref?.nativeElement && !this.userInteracted) {
+      ref.nativeElement.value = '';
+    }
+  }
+  private searchInputRef?: ElementRef<HTMLInputElement>;
 
   protected readonly searchKeyword = signal('');
   protected readonly selectedDept = signal('');
@@ -317,26 +378,69 @@ export class PayrollComponent implements OnInit {
 
   protected readonly filteredRows = computed(() => {
     const q = this.searchKeyword().toLowerCase().trim();
-    const d = this.selectedDept().toLowerCase().trim();
+    const d = this.selectedDept();
     return this.rows().filter((r) => {
       const matchQ =
         !q ||
         r.name.toLowerCase().includes(q) ||
         r.empId.toLowerCase().includes(q) ||
+        r.department.toLowerCase().includes(q) ||
         r.designation.toLowerCase().includes(q);
-      const matchD = !d || r.department.toLowerCase() === d;
+      const matchD = !d || r.department === d;
       return matchQ && matchD;
     });
   });
+
+  protected enableSearchEdit(): void {
+    this.isSearchReadonly.set(false);
+    this.userInteracted = true;
+  }
+
+  protected onSearchKeydown(): void {
+    this.isSearchReadonly.set(false);
+    this.userInteracted = true;
+  }
+
+  protected onSearchInput(val: string, event?: Event): void {
+    // If browser autofills an email or credential without user interaction
+    if (!this.userInteracted && (val.includes('@') || !event?.isTrusted)) {
+      this.searchKeyword.set('');
+      if (this.searchInputRef?.nativeElement) {
+        this.searchInputRef.nativeElement.value = '';
+      }
+      return;
+    }
+    this.userInteracted = true;
+    this.searchKeyword.set(val || '');
+  }
+
+  protected clearSearch(): void {
+    this.searchKeyword.set('');
+    if (this.searchInputRef?.nativeElement) {
+      this.searchInputRef.nativeElement.value = '';
+    }
+  }
 
   ngOnInit(): void {
     this.loadBackendPayroll();
   }
 
-  protected onMonthChange(newMonth?: string): void {
-    if (newMonth) {
-      this.selectedMonth.set(newMonth);
-    }
+  ngAfterViewInit(): void {
+    const clearIfAutofilled = () => {
+      if (this.searchInputRef?.nativeElement && !this.userInteracted) {
+        this.searchInputRef.nativeElement.value = '';
+        this.searchKeyword.set('');
+      }
+    };
+    setTimeout(clearIfAutofilled, 50);
+    setTimeout(clearIfAutofilled, 150);
+    setTimeout(clearIfAutofilled, 300);
+    setTimeout(clearIfAutofilled, 600);
+    setTimeout(clearIfAutofilled, 1200);
+  }
+
+  protected onMonthChange(newMonth: string): void {
+    this.selectedMonth.set(newMonth);
     this.loadBackendPayroll();
     this.toast.show(`Loaded payroll register for ${this.activeMonthLabel()}`);
   }
@@ -409,10 +513,9 @@ export class PayrollComponent implements OnInit {
   }
 
   private applyPayslips(payslips: Payslip[]): void {
-    const mapped: ComprehensivePayrollRow[] = payslips.map((p) => ({
-      id: p.id,
-      employeeGuid: p.employeeId,
-      empId: p.employeeId ? p.employeeId.slice(0, 8).toUpperCase() : 'EMP-001',
+    const mapped: ComprehensivePayrollRow[] = payslips.map((p, idx) => ({
+      empId: p.employeeCode || (p.employeeId ? p.employeeId.slice(0, 8).toUpperCase() : `EMP-10${idx + 1}`),
+      fullEmpId: p.employeeId,
       name: p.employeeName || 'Employee',
       department: p.department || 'Operations',
       designation: 'Specialist',
@@ -443,8 +546,8 @@ export class PayrollComponent implements OnInit {
             const allowances = Math.round(basic * 0.25);
             const deductions = 250;
             return {
-              employeeGuid: e.id,
               empId: e.employeeCode || `EMP-10${idx + 1}`,
+              fullEmpId: e.id,
               name: e.fullName,
               department: e.department || 'Engineering',
               designation: e.jobTitle || 'Software Engineer',
@@ -508,47 +611,135 @@ export class PayrollComponent implements OnInit {
     this.selectedRow.set(r);
   }
 
-  protected downloadPayslip(r: ComprehensivePayrollRow): void {
-    const [yearStr, monthStr] = this.selectedMonth().split('-');
-    const year = parseInt(yearStr, 10) || new Date().getFullYear();
-    const month = parseInt(monthStr, 10) || (new Date().getMonth() + 1);
-
-    this.downloadingSlip.set(true);
-    this.toast.show(`Downloading payslip PDF for ${r.name}...`);
-
-    this.api
-      .downloadPayslip({
-        payslipId: r.id,
-        employeeId: r.employeeGuid,
-        employeeCode: r.empId,
-        month,
-        year,
-      })
-      .subscribe({
-        next: (blob) => {
-          this.downloadingSlip.set(false);
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `Payslip_${r.empId}_${this.selectedMonth()}.pdf`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-          this.toast.show(`Payslip downloaded for ${r.name}!`, 'success');
-        },
-        error: (err) => {
-          this.downloadingSlip.set(false);
-          this.toast.show(`Failed to download payslip: ${err?.message || 'Server error'}`, 'danger');
-        },
-      });
+  protected openFullPayslip(r: ComprehensivePayrollRow): void {
+    const targetId = r.fullEmpId || r.empId;
+    this.selectedRow.set(null);
+    this.router.navigate(['/payslips'], { queryParams: { employeeId: targetId } });
   }
 
   protected downloadModalPayslip(): void {
     const r = this.selectedRow();
     if (!r) return;
-    this.downloadPayslip(r);
-    this.selectedRow.set(null);
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+    // Header background bar
+    doc.setFillColor(30, 58, 138); // #1e3a8a
+    doc.rect(0, 0, 210, 28, 'F');
+
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(16);
+    doc.text('HRNEXUS CORPORATION', 14, 12);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.text('Dubai Internet City, Dubai, UAE · TRN: 100-2495-9201', 14, 18);
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.text('PAYSLIP', 196, 12, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.text(`Period: ${this.activeMonthLabel()}`, 196, 18, { align: 'right' });
+    doc.text(`Status: ${r.status}`, 196, 23, { align: 'right' });
+
+    // Employee Details Box
+    doc.setDrawColor(229, 231, 235);
+    doc.setFillColor(249, 250, 251);
+    doc.roundedRect(14, 34, 182, 32, 2, 2, 'FD');
+
+    doc.setTextColor(31, 41, 55);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.text('EMPLOYEE DETAILS', 18, 40);
+    doc.text('PAYMENT DETAILS', 110, 40);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(107, 114, 128);
+    doc.text('Employee Name:', 18, 47);
+    doc.text('Employee ID:', 18, 53);
+    doc.text('Department:', 18, 59);
+
+    doc.text('Designation:', 110, 47);
+    doc.text('Days Worked:', 110, 53);
+    doc.text('Pay Period:', 110, 59);
+
+    doc.setTextColor(17, 24, 39);
+    doc.setFont('helvetica', 'bold');
+    doc.text(r.name, 50, 47);
+    doc.text(r.empId, 50, 53);
+    doc.text(r.department, 50, 59);
+
+    doc.text(r.designation, 142, 47);
+    doc.text(`${r.fullDay} Days`, 142, 53);
+    doc.text(this.activeMonthLabel(), 142, 59);
+
+    // Earnings & Deductions Tables
+    let y = 74;
+    doc.setFillColor(243, 244, 246);
+    doc.rect(14, y, 91, 8, 'F');
+    doc.rect(105, y, 91, 8, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(31, 41, 55);
+    doc.text('EARNINGS', 18, y + 5.5);
+    doc.text('AMOUNT', 101, y + 5.5, { align: 'right' });
+    doc.text('DEDUCTIONS', 109, y + 5.5);
+    doc.text('AMOUNT', 192, y + 5.5, { align: 'right' });
+
+    y += 12;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(75, 85, 99);
+
+    // Row 1
+    doc.text('Basic Salary', 18, y);
+    doc.text(`$${r.basicSalary.toLocaleString()}`, 101, y, { align: 'right' });
+    doc.text('Standard Deductions / LOP', 109, y);
+    doc.text(`$${r.deductions.toLocaleString()}`, 192, y, { align: 'right' });
+
+    // Row 2
+    y += 7;
+    doc.text('Allowances (Housing & Transport)', 18, y);
+    doc.text(`$${r.allowances.toLocaleString()}`, 101, y, { align: 'right' });
+    if (r.loanAdvance > 0) {
+      doc.text('Loan / Advance Repayment', 109, y);
+      doc.text(`$${r.loanAdvance.toLocaleString()}`, 192, y, { align: 'right' });
+    }
+
+    // Totals Box
+    y += 14;
+    doc.setFillColor(249, 250, 251);
+    doc.rect(14, y, 91, 8, 'F');
+    doc.rect(105, y, 91, 8, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(17, 24, 39);
+    doc.text('Total Earnings', 18, y + 5.5);
+    doc.text(`$${r.grossEarnings.toLocaleString()}`, 101, y + 5.5, { align: 'right' });
+    doc.text('Total Deductions', 109, y + 5.5);
+    doc.text(`$${(r.deductions + r.loanAdvance).toLocaleString()}`, 192, y + 5.5, { align: 'right' });
+
+    // Net Pay Callout
+    y += 18;
+    doc.setFillColor(238, 242, 255); // #eef2ff
+    doc.setDrawColor(199, 210, 254);
+    doc.roundedRect(14, y, 182, 16, 2, 2, 'FD');
+
+    doc.setTextColor(30, 58, 138);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text('NET SALARY PAYABLE:', 20, y + 10.5);
+    doc.setFontSize(13);
+    doc.text(`$${r.netPay.toLocaleString()}`, 190, y + 10.5, { align: 'right' });
+
+    // Save and download file
+    const safeName = r.name.replace(/[^a-zA-Z0-9]/g, '_');
+    doc.save(`Payslip_${safeName}_${this.selectedMonth()}.pdf`);
+    this.toast.show(`Payslip downloaded for ${r.name}!`, 'success');
   }
 
   protected executeRunPayroll(): void {
