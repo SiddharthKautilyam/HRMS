@@ -10,8 +10,14 @@ type Panel = 'notif' | 'punch' | 'avatar' | null;
 export class UiService {
   private readonly _modals = signal<Record<string, boolean>>({});
   private readonly _panel = signal<Panel>(null);
+  private readonly _navRefresh = signal<number>(0);
 
   readonly panel = this._panel.asReadonly();
+  readonly navigationRefresh = this._navRefresh.asReadonly();
+
+  triggerNavigationRefresh(): void {
+    this._navRefresh.update((v) => v + 1);
+  }
 
   isOpen(id: string): boolean {
     return !!this._modals()[id];

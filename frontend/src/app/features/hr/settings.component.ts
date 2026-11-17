@@ -16,6 +16,8 @@ import { IconDirective } from '../../core/icons/icon.directive';
 import { PermissionService } from '../../core/services/permission.service';
 import { ToastService } from '../../core/services/toast.service';
 import { KeyGroupCacheService } from '../../core/services/key-group-cache.service';
+import { UiService } from '../../core/services/ui.service';
+import { SessionService } from '../../core/services/session.service';
 
 export interface FlatKeyGroupItem {
   id: string;
@@ -58,7 +60,7 @@ export interface FlatNavigationItem {
       <!-- Settings Top Tabs Navigation -->
       <div class="card p-0" style="margin-bottom: 20px; border-radius: 10px; overflow: hidden;">
         <div style="display: flex; gap: 4px; border-bottom: 1px solid var(--border); background: var(--surface); padding: 4px 12px 0 12px;">
-          @for (t of tabs; track t.id) {
+          @for (t of tabs(); track t.id) {
             <button
               class="settings-tab-btn"
               [class.active]="activeTab() === t.id"
@@ -78,13 +80,23 @@ export interface FlatNavigationItem {
         @if (isEditingKeyGroup()) {
           <!-- Screenshot 1: Key Group & Key Store Editor -->
           <div class="card p-0" style="border-radius: 8px; border: 1px solid var(--border); overflow: hidden; background: var(--surface);">
-            <!-- Top title row with red [x] button -->
+            <!-- Top title row with clean close button -->
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; border-bottom: 1px solid var(--border);">
-              <h5 class="mb-0" style="font-weight: 800; font-size: 16px; color: var(--text);">Key Group</h5>
+              <div style="display: flex; align-items: center; gap: 10px;">
+                <h5 class="mb-0" style="font-weight: 800; font-size: 16px; color: var(--text);">
+                  {{ keyGroupEditForm.id ? 'Edit Key Group' : 'Add Key Group' }}
+                </h5>
+                @if (keyGroupEditForm.code) {
+                  <span class="badge" style="background: var(--bg); border: 1px solid var(--border); font-family: monospace; font-size: 11px;">
+                    {{ keyGroupEditForm.code }}
+                  </span>
+                }
+              </div>
               <button 
                 type="button" 
+                class="btn btn-ghost btn-sm"
                 (click)="closeKeyGroupEditor()"
-                style="background: #ef4444; color: white; border-radius: 4px; padding: 4px 8px; display: flex; align-items: center; justify-content: center; border: none; cursor: pointer;"
+                style="color: var(--muted); padding: 4px 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; border-radius: 6px;"
                 data-tooltip="Close"
               >
                 <span [appIcon]="'x'"></span>
@@ -114,6 +126,16 @@ export interface FlatNavigationItem {
                   [(ngModel)]="keyGroupEditForm.code" 
                   [disabled]="!!keyGroupEditForm.id"
                   placeholder="e.g. BLOOD_GROUP" 
+                  style="width: 100%; font-size: 13px;" 
+                />
+              </div>
+              <div style="flex: 1; min-width: 240px; max-width: 320px;">
+                <label style="font-size: 12px; font-weight: 600; margin-bottom: 4px; display: block; color: var(--muted);">Description</label>
+                <input 
+                  type="text" 
+                  class="form-control" 
+                  [(ngModel)]="keyGroupEditForm.description" 
+                  placeholder="e.g. Employee blood groups dictionary" 
                   style="width: 100%; font-size: 13px;" 
                 />
               </div>
@@ -254,13 +276,14 @@ export interface FlatNavigationItem {
                           type="text" 
                           class="form-control" 
                           placeholder="Search Name..." 
-                          [(ngModel)]="keyGroupSearch" 
+                          [ngModel]="keyGroupSearch()" 
+                          (ngModelChange)="keyGroupSearch.set($event)"
                           style="width: 100%; font-size: 12px; padding: 4px 8px;"
                         />
                       </th>
                       <th style="padding: 6px 12px;" colspan="3"></th>
                       <th style="padding: 6px 12px; text-align: right;">
-                        <button class="btn btn-ghost btn-sm" (click)="keyGroupSearch = ''" data-tooltip="Clear">
+                        <button class="btn btn-ghost btn-sm" (click)="keyGroupSearch.set('')" data-tooltip="Clear">
                           <span [appIcon]="'x'"></span>
                         </button>
                       </th>
@@ -374,13 +397,14 @@ export interface FlatNavigationItem {
                         type="text" 
                         class="form-control" 
                         placeholder="Search Title..." 
-                        [(ngModel)]="navSearch" 
+                        [ngModel]="navSearch()" 
+                        (ngModelChange)="navSearch.set($event)"
                         style="width: 100%; font-size: 12px; padding: 4px 8px;"
                       />
                     </th>
                     <th style="padding: 6px 12px;" colspan="5"></th>
                     <th style="padding: 6px 12px; text-align: right;">
-                      <button class="btn btn-ghost btn-sm" (click)="navSearch = ''" data-tooltip="Clear">
+                      <button class="btn btn-ghost btn-sm" (click)="navSearch.set('')" data-tooltip="Clear">
                         <span [appIcon]="'x'"></span>
                       </button>
                     </th>
@@ -409,7 +433,31 @@ export interface FlatNavigationItem {
                     </td>
                     <td style="font-size: 12px; font-family: monospace;">{{ item.route }}</td>
                     <td style="font-size: 13px; color: var(--muted);">{{ item.parentTitle || 'Root (Top-level)' }}</td>
-                    <td style="text-align: center; font-weight: 700;">{{ item.orderIndex }}</td>
+                    <td style="text-align: center; font-weight: 700;">
+                      <div style="display: inline-flex; align-items: center; justify-content: center; gap: 4px;">
+                        <button 
+                          type="button"
+                          class="tbl-btn" 
+                          (click)="moveNav(item, -1)" 
+                          [disabled]="isFirstSibling(item)" 
+                          data-tooltip="Move Up" 
+                          style="padding: 2px 5px; font-size: 10px; width: 22px; height: 22px; line-height: 1;"
+                        >
+                          ▲
+                        </button>
+                        <span style="min-width: 18px; text-align: center;">{{ item.orderIndex }}</span>
+                        <button 
+                          type="button"
+                          class="tbl-btn" 
+                          (click)="moveNav(item, 1)" 
+                          [disabled]="isLastSibling(item)" 
+                          data-tooltip="Move Down" 
+                          style="padding: 2px 5px; font-size: 10px; width: 22px; height: 22px; line-height: 1;"
+                        >
+                          ▼
+                        </button>
+                      </div>
+                    </td>
                     <td style="text-align: center;">
                       <span class="badge" [style.background]="item.isActive ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.15)'" [style.color]="item.isActive ? '#059669' : '#dc2626'">
                         {{ item.isActive ? 'Active' : 'Inactive' }}
@@ -454,7 +502,7 @@ export interface FlatNavigationItem {
             </div>
 
             <div style="padding: 8px;">
-              @for (role of roles(); track role.id) {
+              @for (role of permissionRoles(); track role.id) {
                 <div 
                   (click)="selectRoleForPermissions(role)"
                   style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 8px; cursor: pointer; transition: background .15s; margin-bottom: 4px;"
@@ -473,6 +521,10 @@ export interface FlatNavigationItem {
                   @if (role.isSystem) {
                     <span class="badge" style="font-size: 10px; background: rgba(59,130,246,0.12); color: #2563eb;">Sys</span>
                   }
+                </div>
+              } @empty {
+                <div style="padding: 16px; font-size: 12px; color: var(--muted); text-align: center;">
+                  No configurable roles found. System Admin roles have full access by default.
                 </div>
               }
             </div>
@@ -611,13 +663,14 @@ export interface FlatNavigationItem {
                         type="text" 
                         class="form-control" 
                         placeholder="Search Role..." 
-                        [(ngModel)]="roleSearch" 
+                        [ngModel]="roleSearch()" 
+                        (ngModelChange)="roleSearch.set($event)"
                         style="width: 100%; font-size: 12px; padding: 4px 8px;"
                       />
                     </th>
                     <th style="padding: 6px 12px;" colspan="4"></th>
                     <th style="padding: 6px 12px; text-align: right;">
-                      <button class="btn btn-ghost btn-sm" (click)="roleSearch = ''" data-tooltip="Clear">
+                      <button class="btn btn-ghost btn-sm" (click)="roleSearch.set('')" data-tooltip="Clear">
                         <span [appIcon]="'x'"></span>
                       </button>
                     </th>
@@ -645,14 +698,6 @@ export interface FlatNavigationItem {
                       <div style="display: inline-flex; gap: 6px;">
                         <button class="tbl-btn" (click)="editRole(role)" data-tooltip="Edit">
                           <span [appIcon]="'edit'"></span>
-                        </button>
-                        <button 
-                          class="tbl-btn danger" 
-                          (click)="deleteRole(role)" 
-                          [disabled]="role.isSystem || role.userCount > 0"
-                          [attr.data-tooltip]="role.isSystem ? 'System roles cannot be deleted' : (role.userCount > 0 ? 'Role has assigned users' : 'Delete')"
-                        >
-                          <span [appIcon]="'trash'"></span>
                         </button>
                       </div>
                     </td>
@@ -728,6 +773,11 @@ export interface FlatNavigationItem {
               <div class="form-group">
                 <label class="form-label">Code *</label>
                 <input class="form-control" [(ngModel)]="navForm.code" placeholder="e.g. SHIF, KEYG" />
+                @if (isDuplicateNavCode()) {
+                  <div style="font-size: 11px; color: #dc2626; margin-top: 4px; font-weight: 600;">
+                    ⚠️ Code already in use by another navigation item. Please enter a unique code.
+                  </div>
+                }
               </div>
               <div class="form-group">
                 <label class="form-label">Icon</label>
@@ -754,7 +804,28 @@ export interface FlatNavigationItem {
             </div>
             <div class="form-group" style="margin-bottom: 12px;">
               <label class="form-label">Route / Path *</label>
-              <input class="form-control" [(ngModel)]="navForm.route" placeholder="e.g. /shift or /settings#role" />
+              <input class="form-control" [(ngModel)]="navForm.route" list="standardRoutesList" placeholder="e.g. /employee-profile, /shift, or /settings#role" />
+              <datalist id="standardRoutesList">
+                <option value="/dashboard">Dashboard</option>
+                <option value="/analytics">Analytics</option>
+                <option value="/company">Company</option>
+                <option value="/employees">Employees</option>
+                <option value="/employee-profile">Profile (Employee Profile)</option>
+                <option value="/shift">Shift Management</option>
+                <option value="/attendance">Attendance</option>
+                <option value="/leave">Leave Management</option>
+                <option value="/payroll">Payroll</option>
+                <option value="/payslips">Payslips</option>
+                <option value="/onboarding">Onboarding</option>
+                <option value="/documents">Documents</option>
+                <option value="/approvals">Approvals</option>
+                <option value="/reports">Reports</option>
+                <option value="/settings">Settings</option>
+                <option value="/settings#keygroup">Settings - Key Group</option>
+                <option value="/settings#navigation">Settings - Navigation</option>
+                <option value="/settings#permission">Settings - Permission</option>
+                <option value="/settings#role">Settings - Role</option>
+              </datalist>
             </div>
             <div class="form-group" style="margin-bottom: 12px;">
               <label class="form-label">Parent Navigation (Nesting Hierarchy)</label>
@@ -793,27 +864,91 @@ export class SettingsComponent implements OnInit {
   private readonly permService = inject(PermissionService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly ui = inject(UiService);
+  private readonly session = inject(SessionService);
+  protected readonly currentRole = computed(() => this.session.activeRole());
 
-  protected readonly tabs: { id: 'keygroup' | 'navigation' | 'permission' | 'role'; label: string }[] = [
-    { id: 'keygroup', label: 'Key Group' },
-    { id: 'navigation', label: 'Navigation' },
-    { id: 'permission', label: 'Permission' },
-    { id: 'role', label: 'Role' },
-  ];
+  protected readonly tabs = computed<{ id: 'keygroup' | 'navigation' | 'permission' | 'role'; label: string }[]>(() => {
+    const settingsChildren = this.flatNavigations().filter((n) => {
+      const route = (n.route || '').toLowerCase();
+      const code = (n.code || '').toUpperCase();
+      return (
+        code === 'KEYG' ||
+        code === 'NAVM' ||
+        code === 'PERM' ||
+        code === 'ROLE' ||
+        route.includes('#keygroup') ||
+        route.includes('#navigation') ||
+        route.includes('#permission') ||
+        route.includes('#role') ||
+        route.includes('tab=keygroup') ||
+        route.includes('tab=navigation') ||
+        route.includes('tab=permission') ||
+        route.includes('tab=role')
+      );
+    }).sort((a, b) => a.orderIndex - b.orderIndex);
 
-  protected readonly activeTab = signal<'keygroup' | 'navigation' | 'permission' | 'role'>('role');
+    if (settingsChildren.length === 0) {
+      return [
+        { id: 'keygroup', label: 'Key Group' },
+        { id: 'navigation', label: 'Navigation' },
+        { id: 'permission', label: 'Permission' },
+        { id: 'role', label: 'Role' },
+      ];
+    }
+
+    const mapCodeOrRouteToTab = (
+      n: FlatNavigationItem
+    ): { id: 'keygroup' | 'navigation' | 'permission' | 'role'; label: string } | null => {
+      const code = (n.code || '').toUpperCase();
+      const route = (n.route || '').toLowerCase();
+      const title = n.title;
+      if (code === 'KEYG' || route.includes('keygroup')) return { id: 'keygroup', label: title || 'Key Group' };
+      if (code === 'NAVM' || route.includes('navigation')) return { id: 'navigation', label: title || 'Navigation' };
+      if (code === 'PERM' || route.includes('permission')) return { id: 'permission', label: title || 'Permission' };
+      if (code === 'ROLE' || route.includes('role')) return { id: 'role', label: title || 'Role' };
+      return null;
+    };
+
+    const result: { id: 'keygroup' | 'navigation' | 'permission' | 'role'; label: string }[] = [];
+    const seen = new Set<string>();
+
+    for (const child of settingsChildren) {
+      const tab = mapCodeOrRouteToTab(child);
+      if (tab && !seen.has(tab.id)) {
+        seen.add(tab.id);
+        result.push(tab);
+      }
+    }
+
+    const allDefaults: { id: 'keygroup' | 'navigation' | 'permission' | 'role'; label: string }[] = [
+      { id: 'keygroup', label: 'Key Group' },
+      { id: 'navigation', label: 'Navigation' },
+      { id: 'permission', label: 'Permission' },
+      { id: 'role', label: 'Role' },
+    ];
+    for (const def of allDefaults) {
+      if (!seen.has(def.id)) {
+        result.push(def);
+      }
+    }
+
+    return result;
+  });
+
+  protected readonly activeTab = signal<'keygroup' | 'navigation' | 'permission' | 'role'>('keygroup');
 
   // Key Groups Backend State
   private readonly keyGroupCache = inject(KeyGroupCacheService);
   protected readonly keyGroups = signal<KeyGroup[]>([]);
   protected readonly isEditingKeyGroup = signal<boolean>(false);
   protected readonly savingKeyGroup = signal<boolean>(false);
-  protected keyGroupEditForm = { id: '', code: '', name: '', isGeneric: false };
+  protected keyGroupEditForm = { id: '', code: '', name: '', description: '', isGeneric: false };
   protected readonly keyStoreRows = signal<Array<{ id?: string; key: string; value: string; subValue?: string; isActive: boolean }>>([]);
   private originalEditingKg: KeyGroup | null = null;
   protected readonly isEnumLocked = computed(() => {
     const code = (this.keyGroupEditForm.code || '').toUpperCase().trim();
-    return !!(this.originalEditingKg?.isEnumLocked || ['GENDER', 'MARITAL_STATUS', 'EMPLOYMENT_TYPE', 'PAYMENT_MODE', 'DOCUMENT_TYPE'].includes(code));
+    return !!(this.originalEditingKg?.isEnumLocked || ['GENDER', 'MARITAL_STATUS', 'EMPLOYMENT_TYPE', 'PAYMENT_MODE'].includes(code));
   });
 
   // Navigations State (from backend tree)
@@ -830,9 +965,9 @@ export class SettingsComponent implements OnInit {
 
   // Filters & Search
   protected readonly showFilterRow = signal(false);
-  protected keyGroupSearch = '';
-  protected navSearch = '';
-  protected roleSearch = '';
+  protected readonly keyGroupSearch = signal('');
+  protected readonly navSearch = signal('');
+  protected readonly roleSearch = signal('');
 
   protected readonly showRoleModal = signal(false);
   protected readonly editingRoleId = signal<string | null>(null);
@@ -843,6 +978,7 @@ export class SettingsComponent implements OnInit {
   protected readonly showNavModal = signal(false);
   protected readonly editingNavId = signal<string | null>(null);
   protected readonly savingNav = signal(false);
+  private originalEditingNavCode = '';
   protected navForm = {
     title: '',
     code: '',
@@ -853,9 +989,17 @@ export class SettingsComponent implements OnInit {
     isActive: true,
   };
 
+  protected isDuplicateNavCode(): boolean {
+    const code = this.navForm.code?.trim().toUpperCase();
+    if (!code) return false;
+    const editId = this.editingNavId();
+    if (editId && code === this.originalEditingNavCode) return false;
+    return this.flatNavigations().some((n) => n.id.toLowerCase() !== editId?.toLowerCase() && n.code.toUpperCase() === code);
+  }
+
   protected readonly filteredKeyGroups = computed<FlatKeyGroupItem[]>(() => {
     const list = this.keyGroups();
-    const q = this.keyGroupSearch.trim().toLowerCase();
+    const q = this.keyGroupSearch().trim().toLowerCase();
     const filtered = q
       ? list.filter((kg) => kg.name.toLowerCase().includes(q) || kg.code.toLowerCase().includes(q))
       : list;
@@ -873,14 +1017,60 @@ export class SettingsComponent implements OnInit {
 
   protected readonly filteredNavigations = computed(() => {
     return this.flatNavigations().filter((nav) =>
-      !this.navSearch || nav.title.toLowerCase().includes(this.navSearch.toLowerCase()) || nav.code.toLowerCase().includes(this.navSearch.toLowerCase())
+      !this.navSearch() || nav.title.toLowerCase().includes(this.navSearch().toLowerCase()) || nav.code.toLowerCase().includes(this.navSearch().toLowerCase())
     );
   });
 
-  protected readonly filteredRoles = computed(() => {
-    return this.roles().filter((r) =>
-      !this.roleSearch || r.name.toLowerCase().includes(this.roleSearch.toLowerCase()) || r.code.toLowerCase().includes(this.roleSearch.toLowerCase())
+  protected isSuperOrCompanyAdmin(): boolean {
+    const r1 = (this.session.activeRole() || '').toLowerCase().replace(/[^a-z]/g, '');
+    const r2 = (this.session.user()?.role || '').toLowerCase().replace(/[^a-z]/g, '');
+    const r3 = (this.session.role() || '').toLowerCase().replace(/[^a-z]/g, '');
+    return r1 === 'superadmin' || r1 === 'companyadmin' || r2 === 'superadmin' || r2 === 'companyadmin' || r3 === 'superadmin' || r3 === 'companyadmin';
+  }
+
+  protected isRestrictedAdminRole(role?: RoleItem | null): boolean {
+    if (!role) return false;
+    const code = (role.code || '').toLowerCase().replace(/[^a-z]/g, '');
+    const name = (role.name || '').toLowerCase().replace(/[^a-z]/g, '');
+    return (
+      code.includes('companyadmin') ||
+      name.includes('companyadmin') ||
+      code.includes('superadmin') ||
+      name.includes('superadmin')
     );
+  }
+
+  protected readonly filteredRoles = computed(() => {
+    const isSuperOrCompany = this.isSuperOrCompanyAdmin();
+    const list = this.roles().filter((r) => {
+      // If caller is HR Manager or non-super/company admin, hide Company Admin & Super Admin completely
+      if (!isSuperOrCompany && this.isRestrictedAdminRole(r)) {
+        return false;
+      }
+      return true;
+    });
+
+    return list.filter((r) =>
+      !this.roleSearch() || r.name.toLowerCase().includes(this.roleSearch().toLowerCase()) || r.code.toLowerCase().includes(this.roleSearch().toLowerCase())
+    );
+  });
+
+  protected isAdminRole(role?: RoleItem | null): boolean {
+    if (!role) return false;
+    const name = (role.name || '').toLowerCase();
+    const code = (role.code || '').toLowerCase();
+    return (
+      name.includes('admin') ||
+      code.includes('admin') ||
+      name.includes('hr manager') ||
+      code.includes('hrmanager') ||
+      code === 'superadmin' ||
+      code === 'companyadmin'
+    );
+  }
+
+  protected readonly permissionRoles = computed(() => {
+    return this.roles().filter((r) => !this.isAdminRole(r));
   });
 
   protected readonly availableParents = computed(() => {
@@ -888,38 +1078,54 @@ export class SettingsComponent implements OnInit {
     return this.flatNavigations().filter((n) => n.id !== editId && n.level < 2);
   });
 
+  private normalizeTab(val?: string | null): 'keygroup' | 'navigation' | 'permission' | 'role' | null {
+    if (!val) return null;
+    const lower = val.toLowerCase().replace(/[^a-z]/g, '');
+    if (lower.startsWith('key')) return 'keygroup';
+    if (lower.startsWith('nav')) return 'navigation';
+    if (lower.startsWith('perm')) return 'permission';
+    if (lower.startsWith('role')) return 'role';
+    return null;
+  }
+
   ngOnInit(): void {
     this.loadRoles();
     this.loadNavigations();
     this.loadKeyGroups();
 
     this.route.queryParamMap.subscribe((params) => {
-      const tab = params.get('tab') as 'keygroup' | 'navigation' | 'permission' | 'role' | null;
-      if (tab && ['keygroup', 'navigation', 'permission', 'role'].includes(tab)) {
+      const tab = this.normalizeTab(params.get('tab'));
+      if (tab && tab !== this.activeTab()) {
         this.selectTab(tab, false);
       }
     });
 
     this.route.fragment.subscribe((frag) => {
-      if (frag && ['keygroup', 'navigation', 'permission', 'role'].includes(frag as any)) {
-        this.selectTab(frag as any, false);
+      const tab = this.normalizeTab(frag);
+      if (tab && tab !== this.activeTab()) {
+        this.selectTab(tab, false);
       }
     });
 
-    const initTab = (this.route.snapshot.queryParamMap.get('tab') as any) ||
-      (this.route.snapshot.fragment as any);
-    if (initTab && ['keygroup', 'navigation', 'permission', 'role'].includes(initTab)) {
+    const initTab = this.normalizeTab(this.route.snapshot.queryParamMap.get('tab')) ||
+      this.normalizeTab(this.route.snapshot.fragment);
+    if (initTab) {
       this.selectTab(initTab, false);
     }
   }
 
   protected selectTab(tab: 'keygroup' | 'navigation' | 'permission' | 'role', updateUrl = true): void {
     this.activeTab.set(tab);
+    // Clear filter row and searches when switching tabs
+    this.showFilterRow.set(false);
+    this.keyGroupSearch.set('');
+    this.navSearch.set('');
+    this.roleSearch.set('');
     if (updateUrl) {
       void this.router.navigate([], {
         relativeTo: this.route,
         queryParams: { tab },
-        queryParamsHandling: 'merge',
+        fragment: tab,
       });
     }
     if (tab === 'keygroup') {
@@ -929,8 +1135,9 @@ export class SettingsComponent implements OnInit {
     } else if (tab === 'navigation') {
       this.loadNavigations();
     } else if (tab === 'permission') {
-      if (!this.selectedRole() && this.roles().length > 0) {
-        this.selectRoleForPermissions(this.roles()[0]);
+      const configurable = this.permissionRoles();
+      if ((!this.selectedRole() || this.isAdminRole(this.selectedRole())) && configurable.length > 0) {
+        this.selectRoleForPermissions(configurable[0]);
       } else if (this.selectedRole()) {
         this.loadPermissionsForRole(this.selectedRole()!.id);
       }
@@ -938,7 +1145,14 @@ export class SettingsComponent implements OnInit {
   }
 
   protected toggleFilter(): void {
-    this.showFilterRow.update((v) => !v);
+    const next = !this.showFilterRow();
+    this.showFilterRow.set(next);
+    // Clear all searches when closing the filter row
+    if (!next) {
+      this.keyGroupSearch.set('');
+      this.navSearch.set('');
+      this.roleSearch.set('');
+    }
   }
 
   // ── Roles Backend Integration ──
@@ -946,8 +1160,13 @@ export class SettingsComponent implements OnInit {
     this.api.roles().subscribe({
       next: (list) => {
         this.roles.set(list);
-        if (!this.selectedRole() && list.length > 0) {
-          this.selectedRole.set(list[0]);
+        if (!this.selectedRole() || this.isAdminRole(this.selectedRole())) {
+          const configurable = list.filter((r) => !this.isAdminRole(r));
+          if (configurable.length > 0) {
+            this.selectedRole.set(configurable[0]);
+          } else if (list.length > 0) {
+            this.selectedRole.set(list[0]);
+          }
         }
       },
       error: (err) => {
@@ -964,6 +1183,12 @@ export class SettingsComponent implements OnInit {
   }
 
   protected editRole(role: RoleItem): void {
+    const isHr = this.currentRole() === 'HR Manager' || this.currentRole() === 'HrManager';
+    const code = (role.code || '').toLowerCase().trim();
+    if (isHr && (code === 'companyadmin' || code === 'superadmin')) {
+      this.toast.show('HR Managers do not have permission to edit Company Admin or Super Admin roles', 'danger');
+      return;
+    }
     this.editingRoleId.set(role.id);
     this.isEditingSystemRole.set(role.isSystem);
     this.roleForm = {
@@ -1025,6 +1250,12 @@ export class SettingsComponent implements OnInit {
   }
 
   protected deleteRole(role: RoleItem): void {
+    const isHr = this.currentRole() === 'HR Manager' || this.currentRole() === 'HrManager';
+    const code = (role.code || '').toLowerCase().trim();
+    if (isHr && (code === 'companyadmin' || code === 'superadmin')) {
+      this.toast.show('HR Managers do not have permission to delete Company Admin or Super Admin roles', 'danger');
+      return;
+    }
     if (role.isSystem) {
       this.toast.show('System roles cannot be deleted', 'danger');
       return;
@@ -1088,8 +1319,52 @@ export class SettingsComponent implements OnInit {
     });
   }
 
+  protected isFirstSibling(item: FlatNavigationItem): boolean {
+    const siblings = this.flatNavigations()
+      .filter((n) => (n.parentId || null) === (item.parentId || null))
+      .sort((a, b) => a.orderIndex - b.orderIndex);
+    return siblings.length > 0 && siblings[0].id === item.id;
+  }
+
+  protected isLastSibling(item: FlatNavigationItem): boolean {
+    const siblings = this.flatNavigations()
+      .filter((n) => (n.parentId || null) === (item.parentId || null))
+      .sort((a, b) => a.orderIndex - b.orderIndex);
+    return siblings.length > 0 && siblings[siblings.length - 1].id === item.id;
+  }
+
+  protected moveNav(item: FlatNavigationItem, dir: -1 | 1): void {
+    const siblings = this.flatNavigations()
+      .filter((n) => (n.parentId || null) === (item.parentId || null))
+      .sort((a, b) => a.orderIndex - b.orderIndex);
+    const idx = siblings.findIndex((s) => s.id === item.id);
+    if (idx === -1) return;
+    const targetIdx = idx + dir;
+    if (targetIdx < 0 || targetIdx >= siblings.length) return;
+
+    const other = siblings[targetIdx];
+    const payload = {
+      items: [
+        { id: item.id, orderIndex: other.orderIndex, parentId: item.parentId || null },
+        { id: other.id, orderIndex: item.orderIndex, parentId: other.parentId || null },
+      ],
+    };
+
+    this.api.reorderNavigation(payload).subscribe({
+      next: () => {
+        this.toast.show(`Reordered '${item.title}'`, 'success');
+        this.loadNavigations();
+        this.ui.triggerNavigationRefresh();
+      },
+      error: (err) => {
+        this.toast.show(err?.error?.message || 'Failed to reorder navigation item', 'danger');
+      },
+    });
+  }
+
   protected openAddNav(): void {
     this.editingNavId.set(null);
+    this.originalEditingNavCode = '';
     this.navForm = {
       title: '',
       code: '',
@@ -1104,6 +1379,7 @@ export class SettingsComponent implements OnInit {
 
   protected editNav(item: FlatNavigationItem): void {
     this.editingNavId.set(item.id);
+    this.originalEditingNavCode = (item.code || '').trim().toUpperCase();
     this.navForm = {
       title: item.title,
       code: item.code,
@@ -1117,31 +1393,44 @@ export class SettingsComponent implements OnInit {
   }
 
   protected saveNav(): void {
-    if (!this.navForm.title.trim()) {
+    if (!this.navForm.title?.trim()) {
       this.toast.show('Please enter navigation title', 'danger');
       return;
     }
-    if (!this.navForm.code.trim()) {
+    if (!this.navForm.code?.trim()) {
       this.toast.show('Please enter navigation code', 'danger');
       return;
     }
-    if (!this.navForm.route.trim()) {
+    if (!this.navForm.route?.trim()) {
       this.toast.show('Please enter route path', 'danger');
+      return;
+    }
+
+    if (this.isDuplicateNavCode()) {
+      this.toast.show(`Code '${this.navForm.code.trim().toUpperCase()}' is already in use by another navigation item. Please choose a unique code.`, 'danger');
       return;
     }
 
     this.savingNav.set(true);
     const id = this.editingNavId();
 
+    let cleanRoute = this.navForm.route.trim();
+    if (!cleanRoute.startsWith('/') && !cleanRoute.startsWith('#')) {
+      cleanRoute = '/' + cleanRoute;
+    }
+
+    const parsedOrder = parseInt(String(this.navForm.orderIndex), 10);
+    const orderIndex = isNaN(parsedOrder) || parsedOrder < 1 ? 1 : parsedOrder;
+
     const payload = {
       id: id || undefined,
       title: this.navForm.title.trim(),
       code: this.navForm.code.trim().toUpperCase(),
-      route: this.navForm.route.trim(),
-      icon: this.navForm.icon,
+      route: cleanRoute,
+      icon: this.navForm.icon || 'settings',
       parentId: this.navForm.parentId || null,
-      orderIndex: this.navForm.orderIndex || 1,
-      isActive: this.navForm.isActive,
+      orderIndex: orderIndex,
+      isActive: this.navForm.isActive ?? true,
     };
 
     if (id) {
@@ -1151,9 +1440,14 @@ export class SettingsComponent implements OnInit {
           this.savingNav.set(false);
           this.showNavModal.set(false);
           this.loadNavigations();
+          this.ui.triggerNavigationRefresh();
         },
         error: (err) => {
-          this.toast.show(err?.error?.message || 'Failed to update navigation item', 'danger');
+          const msg = err?.error?.message 
+            || err?.error?.title 
+            || (err?.error?.errors ? Object.values(err.error.errors).flat().join(', ') : null)
+            || 'Failed to update navigation item';
+          this.toast.show(msg, 'danger');
           this.savingNav.set(false);
         },
       });
@@ -1164,9 +1458,14 @@ export class SettingsComponent implements OnInit {
           this.savingNav.set(false);
           this.showNavModal.set(false);
           this.loadNavigations();
+          this.ui.triggerNavigationRefresh();
         },
         error: (err) => {
-          this.toast.show(err?.error?.message || 'Failed to create navigation item', 'danger');
+          const msg = err?.error?.message 
+            || err?.error?.title 
+            || (err?.error?.errors ? Object.values(err.error.errors).flat().join(', ') : null)
+            || 'Failed to create navigation item';
+          this.toast.show(msg, 'danger');
           this.savingNav.set(false);
         },
       });
@@ -1186,6 +1485,7 @@ export class SettingsComponent implements OnInit {
       next: () => {
         this.toast.show('Navigation item removed', 'success');
         this.loadNavigations();
+        this.ui.triggerNavigationRefresh();
       },
       error: (err) => {
         this.toast.show(err?.error?.message || 'Failed to delete navigation item', 'danger');
@@ -1279,7 +1579,7 @@ export class SettingsComponent implements OnInit {
 
   protected openAddKeyGroup(): void {
     this.originalEditingKg = null;
-    this.keyGroupEditForm = { id: '', code: '', name: '', isGeneric: false };
+    this.keyGroupEditForm = { id: '', code: '', name: '', description: '', isGeneric: false };
     this.keyStoreRows.set([
       { key: '', value: '', subValue: '', isActive: true },
     ]);
@@ -1292,6 +1592,7 @@ export class SettingsComponent implements OnInit {
       id: kg.id,
       code: kg.code,
       name: kg.name,
+      description: kg.description || '',
       isGeneric: kg.isGeneric ?? false,
     };
     const rows = (kg.items || []).map((s) => ({
@@ -1351,11 +1652,14 @@ export class SettingsComponent implements OnInit {
 
     this.savingKeyGroup.set(true);
 
+    const isNew = !this.keyGroupEditForm.id || this.keyGroupEditForm.id.trim() === '';
+    const groupId = isNew ? undefined : this.keyGroupEditForm.id.trim();
+
     const items: SaveKeyStoreRequest[] = this.keyStoreRows()
       .filter((r) => r.key.trim() || r.value.trim())
       .map((r, idx) => ({
-        id: r.id || undefined,
-        keyGroupId: this.keyGroupEditForm.id || '',
+        id: r.id?.trim() || undefined,
+        keyGroupId: groupId,
         key: r.key.trim() || r.value.trim(),
         value: r.value.trim() || r.key.trim(),
         subValue: r.subValue?.trim() || null,
@@ -1364,10 +1668,11 @@ export class SettingsComponent implements OnInit {
       }));
 
     const payload: SaveKeyGroupRequest = {
-      id: this.keyGroupEditForm.id || undefined,
+      id: groupId,
       code,
       name,
-      isGeneric: this.keyGroupEditForm.isGeneric,
+      description: this.keyGroupEditForm.description?.trim() || null,
+      isGeneric: this.keyGroupEditForm.isGeneric ?? false,
       items,
     };
 
@@ -1380,7 +1685,11 @@ export class SettingsComponent implements OnInit {
         this.loadKeyGroups();
       },
       error: (err) => {
-        this.toast.show(err?.error?.message || 'Failed to save key group', 'danger');
+        const msg = err?.error?.message 
+          || err?.error?.title 
+          || (err?.error?.errors ? Object.values(err.error.errors).flat().join(', ') : null)
+          || 'Failed to save key group';
+        this.toast.show(msg, 'danger');
         this.savingKeyGroup.set(false);
       },
     });

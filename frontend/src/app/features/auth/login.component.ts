@@ -211,6 +211,10 @@ export class LoginComponent implements OnInit, OnDestroy {
   ];
 
   ngOnInit(): void {
+    if (this.session.isAuthenticated()) {
+      void this.router.navigateByUrl(this.session.landingPath());
+      return;
+    }
     this.resetTimer();
     const queryCode =
       this.route.snapshot.queryParamMap.get('code') ||

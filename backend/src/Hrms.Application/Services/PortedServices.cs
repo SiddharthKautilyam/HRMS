@@ -274,16 +274,37 @@ public sealed class ShiftRosterService : IShiftRosterService
 public sealed class RoleService : IRoleService
 {
     private readonly IUnitOfWork _uow;
+    private readonly ICurrentUser _currentUser;
 
-    public RoleService(IUnitOfWork uow)
+    public RoleService(IUnitOfWork uow, ICurrentUser currentUser)
     {
         _uow = uow;
+        _currentUser = currentUser;
+    }
+
+    private bool IsHrManagerOnly()
+    {
+        var role = _currentUser.Role ?? string.Empty;
+        return role.Equals("HR Manager", StringComparison.OrdinalIgnoreCase) ||
+               role.Equals("HrManager", StringComparison.OrdinalIgnoreCase) ||
+               role.Equals("HR", StringComparison.OrdinalIgnoreCase);
     }
 
     public async Task<IReadOnlyList<RoleDto>> GetRolesAsync(CancellationToken ct = default)
     {
         var roles = await _uow.Roles.ToListAsync(
             _uow.Roles.Query().OrderBy(r => r.IsSystem ? 0 : 1).ThenBy(r => r.Name), ct);
+
+        // HR Managers have no R/W access to Company Admin or Super Admin
+        if (IsHrManagerOnly())
+        {
+            roles = roles.Where(r => 
+                !r.Code.Equals("SuperAdmin", StringComparison.OrdinalIgnoreCase) && 
+                !r.Code.Equals("CompanyAdmin", StringComparison.OrdinalIgnoreCase) &&
+                !r.Name.Equals("Super Admin", StringComparison.OrdinalIgnoreCase) &&
+                !r.Name.Equals("Company Admin", StringComparison.OrdinalIgnoreCase)
+            ).ToList();
+        }
 
         var users = await _uow.Users.ListAsync(ct);
         var userCounts = users
@@ -304,6 +325,11 @@ public sealed class RoleService : IRoleService
     {
         var role = await _uow.Roles.GetByIdAsync(id, ct)
                    ?? throw NotFoundException.For("Role", id);
+
+        if (IsHrManagerOnly() && (role.Code.Equals("SuperAdmin", StringComparison.OrdinalIgnoreCase) || role.Code.Equals("CompanyAdmin", StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new ValidationException("Access denied. HR Managers do not have permission to view or manage Company Admin or Super Admin roles.");
+        }
 
         var count = await _uow.Users.CountQueryAsync(_uow.Users.Query().Where(u => u.RoleId == id), ct);
         return new RoleDto(role.Id, role.Code, role.Name, role.Description, role.IsSystem, count);
@@ -357,6 +383,11 @@ public sealed class RoleService : IRoleService
         var role = await _uow.Roles.GetByIdAsync(id, ct)
                    ?? throw NotFoundException.For("Role", id);
 
+        if (IsHrManagerOnly() && (role.Code.Equals("SuperAdmin", StringComparison.OrdinalIgnoreCase) || role.Code.Equals("CompanyAdmin", StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new ValidationException("Access denied. HR Managers do not have permission to modify Company Admin or Super Admin roles.");
+        }
+
         var code = request.Code.Trim();
         var name = request.Name.Trim();
 
@@ -390,6 +421,11 @@ public sealed class RoleService : IRoleService
     {
         var role = await _uow.Roles.GetByIdAsync(id, ct)
                    ?? throw NotFoundException.For("Role", id);
+
+        if (IsHrManagerOnly() && (role.Code.Equals("SuperAdmin", StringComparison.OrdinalIgnoreCase) || role.Code.Equals("CompanyAdmin", StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new ValidationException("Access denied. HR Managers do not have permission to delete Company Admin or Super Admin roles.");
+        }
 
         if (role.IsSystem)
         {
@@ -462,9 +498,11 @@ public sealed class NavigationService : INavigationService
                               roleName.Equals("Company Admin", StringComparison.OrdinalIgnoreCase) ||
                               roleCode.Equals("CompanyAdmin", StringComparison.OrdinalIgnoreCase) ||
                               roleName.Contains("Admin", StringComparison.OrdinalIgnoreCase) ||
-                              roleCode.Contains("Admin", StringComparison.OrdinalIgnoreCase);
+                              roleCode.Contains("Admin", StringComparison.OrdinalIgnoreCase) ||
+                              roleName.Contains("HR", StringComparison.OrdinalIgnoreCase) ||
+                              roleCode.Contains("HR", StringComparison.OrdinalIgnoreCase);
 
-        // Admins (Company Admin, Super Admin) ALWAYS retain full access to all navigation items
+        // Admins (Company Admin, Super Admin, HR Manager) ALWAYS retain full access to all navigation items
         if (isSuperOrAdmin)
         {
             foreach (var nav in allItems)
@@ -608,11 +646,11 @@ public sealed class NavigationService : INavigationService
         var title = request.Title.Trim();
         var route = request.Route.Trim();
 
-        var existing = await _uow.NavigationItems.FirstOrDefaultAsync(
-            _uow.NavigationItems.Query().Where(n => n.Code.ToLower() == code.ToLower() || n.Route.ToLower() == route.ToLower()), ct);
-        if (existing != null)
+        var existingCode = await _uow.NavigationItems.FirstOrDefaultAsync(
+            _uow.NavigationItems.Query().Where(n => n.Code.ToLower() == code.ToLower()), ct);
+        if (existingCode != null)
         {
-            throw new ConflictException($"A navigation item with code '{code}' or route '{route}' already exists.");
+            throw new ConflictException($"Code '{code}' is already used by navigation item '{existingCode.Title}'. Please use a unique Code.");
         }
 
         int sortIndex = request.OrderIndex;
@@ -638,9 +676,12 @@ public sealed class NavigationService : INavigationService
         await _uow.NavigationItems.AddAsync(nav, ct);
         await _uow.SaveChangesAsync(ct);
 
-        // Auto grant to Super Admin and Company Admin
+        // Auto grant to Super Admin, Company Admin, and HR Manager
         var adminRoles = await _uow.Roles.ToListAsync(
-            _uow.Roles.Query().Where(r => r.Code == "SuperAdmin" || r.Code == "CompanyAdmin" || r.Name == "Super Admin" || r.Name == "Company Admin"), ct);
+            _uow.Roles.Query().Where(r => 
+                r.Code == "SuperAdmin" || r.Code == "CompanyAdmin" || r.Code == "HrManager" ||
+                r.Name == "Super Admin" || r.Name == "Company Admin" || r.Name == "HR Manager" ||
+                r.Name.Contains("Admin") || r.Code.Contains("Admin")), ct);
 
         foreach (var role in adminRoles)
         {
@@ -668,18 +709,41 @@ public sealed class NavigationService : INavigationService
         var code = request.Code.Trim();
         var route = request.Route.Trim();
 
-        var conflict = await _uow.NavigationItems.FirstOrDefaultAsync(
-            _uow.NavigationItems.Query().Where(n => n.Id != id && (n.Code.ToLower() == code.ToLower() || n.Route.ToLower() == route.ToLower())), ct);
-        if (conflict != null)
+        // Only check code conflict if the code is actually changing to another item's code
+        if (!string.IsNullOrWhiteSpace(code) && !nav.Code.Equals(code, StringComparison.OrdinalIgnoreCase))
         {
-            throw new ConflictException($"Another navigation item with code '{code}' or route '{route}' already exists.");
+            var conflictCode = await _uow.NavigationItems.FirstOrDefaultAsync(
+                _uow.NavigationItems.Query().Where(n => n.Id != id && n.Code.ToLower() == code.ToLower()), ct);
+            if (conflictCode != null)
+            {
+                throw new ConflictException($"Code '{code}' is already used by navigation item '{conflictCode.Title}'. Please use a unique Code.");
+            }
+        }
+
+        // Prevent self-referencing circular hierarchy
+        var parentId = request.ParentId;
+        if (parentId.HasValue && parentId.Value == id)
+        {
+            parentId = null;
+        }
+
+        // If orderIndex changed and another sibling under the same parent shares this orderIndex, swap them
+        if (nav.OrderIndex != request.OrderIndex)
+        {
+            var conflictingSibling = await _uow.NavigationItems.FirstOrDefaultAsync(
+                _uow.NavigationItems.Query().Where(n => n.Id != id && n.ParentId == parentId && n.OrderIndex == request.OrderIndex), ct);
+            if (conflictingSibling != null)
+            {
+                conflictingSibling.OrderIndex = nav.OrderIndex;
+                _uow.NavigationItems.Update(conflictingSibling);
+            }
         }
 
         nav.Code = code;
         nav.Title = request.Title.Trim();
         nav.Route = route;
         nav.Icon = string.IsNullOrWhiteSpace(request.Icon) ? nav.Icon : request.Icon.Trim();
-        nav.ParentId = request.ParentId;
+        nav.ParentId = parentId;
         nav.OrderIndex = request.OrderIndex;
         nav.Badge = request.Badge;
         nav.IsActive = request.IsActive;
@@ -907,8 +971,7 @@ public sealed class OptionsService : IOptionsService
         "GENDER",
         "MARITAL_STATUS",
         "EMPLOYMENT_TYPE",
-        "PAYMENT_MODE",
-        "DOCUMENT_TYPE"
+        "PAYMENT_MODE"
     };
 
     public async Task<IReadOnlyList<KeyGroupDto>> GetKeyGroupsAsync(CancellationToken ct = default)
@@ -998,43 +1061,71 @@ public sealed class OptionsService : IOptionsService
         await _uow.SaveChangesAsync(ct);
 
         // Sync or add KeyStore items if provided
-        if (request.Items != null && request.Items.Count > 0)
+        if (request.Items != null)
         {
             var existingStores = await _uow.KeyStores.ToListAsync(
                 _uow.KeyStores.Query().Where(s => s.KeyGroupId == group.Id), ct);
 
-            int order = 1;
-            foreach (var itemReq in request.Items)
+            if (request.Items.Count > 0)
             {
-                if (itemReq.Id.HasValue && itemReq.Id.Value != Guid.Empty)
+                // Build set of incoming IDs (only valid non-empty GUIDs)
+                var incomingIds = request.Items
+                    .Where(i => i.Id.HasValue && i.Id.Value != Guid.Empty)
+                    .Select(i => i.Id!.Value)
+                    .ToHashSet();
+
+                // Delete rows that existed before but are no longer in the incoming list
+                var toDelete = existingStores
+                    .Where(s => !incomingIds.Contains(s.Id))
+                    .ToList();
+                if (toDelete.Count > 0)
                 {
-                    var existing = existingStores.FirstOrDefault(s => s.Id == itemReq.Id.Value);
-                    if (existing != null)
+                    _uow.KeyStores.RemoveRange(toDelete);
+                    await _uow.SaveChangesAsync(ct);
+                }
+
+                int order = 1;
+                foreach (var itemReq in request.Items)
+                {
+                    if (itemReq.Id.HasValue && itemReq.Id.Value != Guid.Empty)
                     {
-                        existing.Key = itemReq.Key.Trim();
-                        existing.Value = itemReq.Value.Trim();
-                        existing.SubValue = itemReq.SubValue?.Trim();
-                        existing.DisplayOrder = itemReq.DisplayOrder > 0 ? itemReq.DisplayOrder : order++;
-                        existing.IsActive = itemReq.IsActive;
-                        _uow.KeyStores.Update(existing);
+                        var existing = existingStores.FirstOrDefault(s => s.Id == itemReq.Id.Value);
+                        if (existing != null)
+                        {
+                            existing.Key = itemReq.Key.Trim();
+                            existing.Value = itemReq.Value.Trim();
+                            existing.SubValue = itemReq.SubValue?.Trim();
+                            existing.DisplayOrder = itemReq.DisplayOrder > 0 ? itemReq.DisplayOrder : order++;
+                            existing.IsActive = itemReq.IsActive;
+                            _uow.KeyStores.Update(existing);
+                        }
+                    }
+                    else if (!string.IsNullOrWhiteSpace(itemReq.Key) || !string.IsNullOrWhiteSpace(itemReq.Value))
+                    {
+                        var storeKey = string.IsNullOrWhiteSpace(itemReq.Key) ? itemReq.Value.Trim() : itemReq.Key.Trim();
+                        var storeVal = string.IsNullOrWhiteSpace(itemReq.Value) ? itemReq.Key.Trim() : itemReq.Value.Trim();
+                        await _uow.KeyStores.AddAsync(new KeyStore
+                        {
+                            KeyGroupId = group.Id,
+                            Key = storeKey,
+                            Value = storeVal,
+                            SubValue = itemReq.SubValue?.Trim(),
+                            DisplayOrder = itemReq.DisplayOrder > 0 ? itemReq.DisplayOrder : order++,
+                            IsActive = itemReq.IsActive
+                        }, ct);
                     }
                 }
-                else if (!string.IsNullOrWhiteSpace(itemReq.Key) || !string.IsNullOrWhiteSpace(itemReq.Value))
+                await _uow.SaveChangesAsync(ct);
+            }
+            else
+            {
+                // Empty items list = remove all key store items for this group
+                if (existingStores.Count > 0)
                 {
-                    var storeKey = string.IsNullOrWhiteSpace(itemReq.Key) ? itemReq.Value.Trim() : itemReq.Key.Trim();
-                    var storeVal = string.IsNullOrWhiteSpace(itemReq.Value) ? itemReq.Key.Trim() : itemReq.Value.Trim();
-                    await _uow.KeyStores.AddAsync(new KeyStore
-                    {
-                        KeyGroupId = group.Id,
-                        Key = storeKey,
-                        Value = storeVal,
-                        SubValue = itemReq.SubValue?.Trim(),
-                        DisplayOrder = itemReq.DisplayOrder > 0 ? itemReq.DisplayOrder : order++,
-                        IsActive = itemReq.IsActive
-                    }, ct);
+                    _uow.KeyStores.RemoveRange(existingStores);
+                    await _uow.SaveChangesAsync(ct);
                 }
             }
-            await _uow.SaveChangesAsync(ct);
         }
 
         return await GetKeyGroupByIdAsync(group.Id, ct);
@@ -1158,8 +1249,9 @@ public sealed class OptionsService : IOptionsService
 
     public async Task<KeyStoreDto> SaveKeyStoreAsync(SaveKeyStoreRequest request, CancellationToken ct = default)
     {
-        var grp = await _uow.KeyGroups.GetByIdAsync(request.KeyGroupId, ct)
-                  ?? throw NotFoundException.For("KeyGroup", request.KeyGroupId);
+        var keyGroupId = request.KeyGroupId ?? throw new ValidationException("KeyGroupId is required when saving an individual key store value.");
+        var grp = await _uow.KeyGroups.GetByIdAsync(keyGroupId, ct)
+                  ?? throw NotFoundException.For("KeyGroup", keyGroupId);
         var isLocked = EnumLockedGroupCodes.Contains(grp.Code);
 
         if (request.Id.HasValue && request.Id.Value != Guid.Empty)
@@ -1205,13 +1297,13 @@ public sealed class OptionsService : IOptionsService
         if (sortOrder <= 0)
         {
             var existingOrders = await _uow.KeyStores.ToListAsync(
-                _uow.KeyStores.Query().Where(s => s.KeyGroupId == request.KeyGroupId).Select(s => s.DisplayOrder), ct);
+                _uow.KeyStores.Query().Where(s => s.KeyGroupId == keyGroupId).Select(s => s.DisplayOrder), ct);
             sortOrder = (existingOrders.Count > 0 ? existingOrders.Max() : 0) + 1;
         }
 
         var newItem = new KeyStore
         {
-            KeyGroupId = request.KeyGroupId,
+            KeyGroupId = keyGroupId,
             Key = request.Key.Trim(),
             Value = request.Value.Trim(),
             SubValue = request.SubValue?.Trim(),

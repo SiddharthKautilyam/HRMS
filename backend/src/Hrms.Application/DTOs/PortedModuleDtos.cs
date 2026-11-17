@@ -98,7 +98,7 @@ public sealed record KeyStoreDto(
 
 public sealed record SaveKeyStoreRequest(
     Guid? Id,
-    Guid KeyGroupId,
+    Guid? KeyGroupId,
     [Required, MaxLength(120)] string Key,
     [Required, MaxLength(250)] string Value,
     [MaxLength(250)] string? SubValue,

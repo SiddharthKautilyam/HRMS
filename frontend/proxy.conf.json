@@ -8,5 +8,10 @@
     "target": "http://localhost:5096",
     "secure": false,
     "changeOrigin": true
+  },
+  "/uploads": {
+    "target": "http://localhost:5096",
+    "secure": false,
+    "changeOrigin": true
   }
 }
