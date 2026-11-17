@@ -7,7 +7,6 @@ namespace Hrms.Api.Controllers;
 
 [ApiController]
 [Route("api/notifications")]
-[Authorize]
 [Tags("Notifications")]
 public sealed class NotificationsController : ControllerBase
 {
@@ -28,6 +27,39 @@ public sealed class NotificationsController : ControllerBase
     public async Task<IActionResult> MarkRead(Guid id, CancellationToken ct)
     {
         await _notifications.MarkReadAsync(id, ct);
+        return NoContent();
+    }
+
+    [HttpPost("mark-all-read")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> MarkAllRead(CancellationToken ct)
+    {
+        await _notifications.MarkAllReadAsync(ct);
+        return NoContent();
+    }
+
+    [HttpDelete("clear-all")]
+    [HttpPost("clear-all")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> ClearAll(CancellationToken ct)
+    {
+        await _notifications.ClearAllAsync(ct);
+        return NoContent();
+    }
+
+    [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        await _notifications.DeleteAsync(id, ct);
+        return NoContent();
+    }
+
+    [HttpPost("{id:guid}/toggle")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    public async Task<IActionResult> ToggleRead(Guid id, CancellationToken ct)
+    {
+        await _notifications.ToggleReadAsync(id, ct);
         return NoContent();
     }
 

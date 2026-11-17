@@ -126,12 +126,6 @@ public interface IShiftRosterService
     Task<ShiftTemplateDto> UpdateShiftTemplateAsync(Guid id, SaveShiftTemplateRequest request, CancellationToken ct = default);
 
     Task DeleteShiftTemplateAsync(Guid id, CancellationToken ct = default);
-
-    Task<IReadOnlyList<ShiftAssignmentDto>> GetAssignmentsAsync(Guid? departmentId, CancellationToken ct = default);
-
-    Task<ShiftAssignmentDto> AssignShiftAsync(AssignShiftRequest request, CancellationToken ct = default);
-
-    Task<RosterMatrixDto> GenerateRosterAsync(RosterQueryRequest request, CancellationToken ct = default);
 }
 
 public interface IRoleService

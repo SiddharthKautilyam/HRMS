@@ -51,26 +51,4 @@ public sealed class RosterController : ControllerBase
         await _roster.DeleteShiftTemplateAsync(id, ct);
         return NoContent();
     }
-
-    [HttpGet("assignments")]
-    [ProducesResponseType(typeof(IReadOnlyList<ShiftAssignmentDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<ShiftAssignmentDto>>> GetAssignments(
-        [FromQuery] Guid? departmentId,
-        CancellationToken ct) =>
-        Ok(await _roster.GetAssignmentsAsync(departmentId, ct));
-
-    [HttpPost("assignments")]
-    [Authorize(Policy = "HrAdmin")]
-    [ProducesResponseType(typeof(ShiftAssignmentDto), StatusCodes.Status200OK)]
-    public async Task<ActionResult<ShiftAssignmentDto>> Assign(
-        [FromBody] AssignShiftRequest request,
-        CancellationToken ct) =>
-        Ok(await _roster.AssignShiftAsync(request, ct));
-
-    [HttpPost("generate")]
-    [ProducesResponseType(typeof(RosterMatrixDto), StatusCodes.Status200OK)]
-    public async Task<ActionResult<RosterMatrixDto>> GenerateRoster(
-        [FromBody] RosterQueryRequest request,
-        CancellationToken ct) =>
-        Ok(await _roster.GenerateRosterAsync(request, ct));
 }

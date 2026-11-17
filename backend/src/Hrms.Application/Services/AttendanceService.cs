@@ -56,17 +56,21 @@ public sealed class AttendanceService : IAttendanceService
     {
         var first = new DateOnly(year, month, 1);
         var daysInMonth = DateTime.DaysInMonth(year, month);
+        var lastDay = new DateOnly(year, month, daysInMonth);
         var records = await _uow.Attendance.ListForEmployeeMonthAsync(employeeId, year, month, ct);
         var byDate = records.ToDictionary(r => r.Date);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        var lastDay = DateOnly.FromDateTime(new DateTime(year, month, daysInMonth));
+
+        var leaves = await _uow.LeaveRequests.ToListAsync(
+            _uow.LeaveRequests.Query().Where(l => l.EmployeeId == employeeId && l.Status == LeaveStatus.Approved && l.FromDate <= lastDay && l.ToDate >= first),
+            ct);
 
         var result = new List<MonthlyMusterDayDto>();
 
         for (var day = 1; day <= daysInMonth; day++)
         {
             var date = first.AddDays(day - 1);
-            if (date > today && date <= lastDay) break;
+            var weekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
 
             if (byDate.TryGetValue(date, out var record))
             {
@@ -78,16 +82,45 @@ public sealed class AttendanceService : IAttendanceService
                     record.WorkHours,
                     record.Status.ToString()));
             }
-            else
+            else if (leaves.Any(l => l.FromDate <= date && l.ToDate >= date))
             {
-                var weekend = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
                 result.Add(new MonthlyMusterDayDto(
                     date,
                     date.ToString("MMM d"),
                     null,
                     null,
                     0,
-                    weekend ? AttendanceStatus.Weekend.ToString() : AttendanceStatus.Absent.ToString()));
+                    AttendanceStatus.OnLeave.ToString()));
+            }
+            else if (weekend)
+            {
+                result.Add(new MonthlyMusterDayDto(
+                    date,
+                    date.ToString("MMM d"),
+                    null,
+                    null,
+                    0,
+                    AttendanceStatus.Weekend.ToString()));
+            }
+            else if (date > today)
+            {
+                result.Add(new MonthlyMusterDayDto(
+                    date,
+                    date.ToString("MMM d"),
+                    null,
+                    null,
+                    0,
+                    "Scheduled"));
+            }
+            else
+            {
+                result.Add(new MonthlyMusterDayDto(
+                    date,
+                    date.ToString("MMM d"),
+                    null,
+                    null,
+                    0,
+                    AttendanceStatus.Absent.ToString()));
             }
         }
 
@@ -146,6 +179,39 @@ public sealed class AttendanceService : IAttendanceService
         entity.DecidedByUserId = _currentUser.UserId;
 
         _uow.Regularizations.Update(entity);
+
+        if (approved)
+        {
+            var record = await _uow.Attendance.GetForEmployeeDateAsync(entity.EmployeeId, entity.Date, ct);
+            var workHours = (decimal)Math.Max(0, Math.Round((entity.OutTime.ToTimeSpan() - entity.InTime.ToTimeSpan()).TotalHours, 2));
+            if (record == null)
+            {
+                record = new AttendanceRecord
+                {
+                    EmployeeId = entity.EmployeeId,
+                    Date = entity.Date,
+                    CheckIn = entity.InTime,
+                    CheckOut = entity.OutTime,
+                    BreakMinutes = 0,
+                    WorkHours = workHours,
+                    Status = AttendanceStatus.Present,
+                    Notes = $"Regularized: {entity.Reason}"
+                };
+                await _uow.Attendance.AddAsync(record, ct);
+            }
+            else
+            {
+                record.CheckIn = entity.InTime;
+                record.CheckOut = entity.OutTime;
+                record.WorkHours = workHours;
+                record.Status = AttendanceStatus.Present;
+                record.Notes = string.IsNullOrWhiteSpace(record.Notes)
+                    ? $"Regularized: {entity.Reason}"
+                    : $"{record.Notes} | Regularized: {entity.Reason}";
+                _uow.Attendance.Update(record);
+            }
+        }
+
         await _uow.SaveChangesAsync(ct);
         return ToRegularizationDto(entity);
     }
@@ -635,54 +701,99 @@ public sealed class AttendanceService : IAttendanceService
             p.Device)).ToList();
     }
 
-    public async Task<TodayAttendanceOverviewDto> GetTodayOverviewAsync(CancellationToken ct = default)
+    public async Task<TodayAttendanceOverviewDto> GetTodayOverviewAsync(DateOnly? targetDate = null, CancellationToken ct = default)
     {
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var target = targetDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
         var employees = await _uow.Employees.ListWithDepartmentAsync(ct);
-        var todayRecords = await _uow.Attendance.ToListAsync(
+        var dateRecords = await _uow.Attendance.ToListAsync(
             _uow.Attendance.Query()
-                .Where(a => a.Date == today)
-                .Select(a => new { a.EmployeeId, a.CheckIn, a.Status }),
+                .Where(a => a.Date == target)
+                .Select(a => new { a.EmployeeId, a.CheckIn, a.CheckOut, a.WorkHours, a.Status, a.Notes }),
             ct);
-        var recordByEmp = todayRecords.ToDictionary(r => r.EmployeeId);
+        var recordByEmp = dateRecords.ToDictionary(r => r.EmployeeId);
 
-        var todayLeaves = await _uow.LeaveRequests.ToListAsync(
-            _uow.LeaveRequests.Query().Where(l => l.Status == LeaveStatus.Approved && l.FromDate <= today && l.ToDate >= today),
+        var dateLeaves = await _uow.LeaveRequests.ToListAsync(
+            _uow.LeaveRequests.Query().Where(l => l.Status == LeaveStatus.Approved && l.FromDate <= target && l.ToDate >= target),
             ct);
-        var leaveByEmp = todayLeaves.ToDictionary(l => l.EmployeeId);
+        var leaveByEmp = dateLeaves.ToDictionary(l => l.EmployeeId);
 
         var presentList = new List<AttendancePersonDto>();
         var absentList = new List<AttendancePersonDto>();
         var onLeaveList = new List<AttendancePersonDto>();
         var lateList = new List<AttendancePersonDto>();
 
-        foreach (var emp in employees.Where(e => e.Status == EmploymentStatus.Active))
+        foreach (var emp in employees.Where(e => e.Status == EmploymentStatus.Active || e.Status == EmploymentStatus.OnLeave))
         {
             var name = $"{emp.FirstName} {emp.LastName}".Trim();
             var dept = emp.Department?.Name ?? "General";
             var desig = emp.Designation?.Name ?? emp.JobTitle;
 
-            if (leaveByEmp.TryGetValue(emp.Id, out var leave))
+            if (recordByEmp.TryGetValue(emp.Id, out var rec) && (rec.CheckIn is not null || rec.Status == AttendanceStatus.Present || rec.Status == AttendanceStatus.Late || rec.Status == AttendanceStatus.HalfDay))
             {
-                onLeaveList.Add(new AttendancePersonDto(emp.Id, name, emp.EmployeeCode, dept, desig, null, leave.Reason));
-            }
-            else if (recordByEmp.TryGetValue(emp.Id, out var rec) && rec.CheckIn is not null)
-            {
-                var person = new AttendancePersonDto(emp.Id, name, emp.EmployeeCode, dept, desig, rec.CheckIn.Value.ToString("hh:mm tt"), null);
+                var person = new AttendancePersonDto(
+                    emp.Id,
+                    name,
+                    emp.EmployeeCode,
+                    dept,
+                    desig,
+                    rec.CheckIn?.ToString("hh:mm tt"),
+                    null,
+                    rec.CheckOut?.ToString("hh:mm tt"),
+                    rec.WorkHours,
+                    rec.Status.ToString());
                 presentList.Add(person);
                 if (rec.Status == AttendanceStatus.Late)
                 {
                     lateList.Add(person);
                 }
             }
+            else if (leaveByEmp.TryGetValue(emp.Id, out var leave))
+            {
+                onLeaveList.Add(new AttendancePersonDto(
+                    emp.Id,
+                    name,
+                    emp.EmployeeCode,
+                    dept,
+                    desig,
+                    null,
+                    leave.Reason,
+                    null,
+                    0,
+                    "OnLeave"));
+            }
+            else if (emp.Status == EmploymentStatus.OnLeave)
+            {
+                onLeaveList.Add(new AttendancePersonDto(
+                    emp.Id,
+                    name,
+                    emp.EmployeeCode,
+                    dept,
+                    desig,
+                    null,
+                    "Approved Leave",
+                    null,
+                    0,
+                    "OnLeave"));
+            }
             else
             {
-                absentList.Add(new AttendancePersonDto(emp.Id, name, emp.EmployeeCode, dept, desig, null, null));
+                absentList.Add(new AttendancePersonDto(
+                    emp.Id,
+                    name,
+                    emp.EmployeeCode,
+                    dept,
+                    desig,
+                    null,
+                    null,
+                    null,
+                    0,
+                    "Absent"));
             }
         }
 
+        var totalActiveTracked = presentList.Count + absentList.Count + onLeaveList.Count;
         return new TodayAttendanceOverviewDto(
-            employees.Count,
+            totalActiveTracked,
             presentList.Count,
             absentList.Count,
             onLeaveList.Count,
@@ -1120,15 +1231,7 @@ public sealed class AttendanceService : IAttendanceService
         var isMandatoryHoliday = nonOptionalHolidays.Count > 0;
         var holidayName = nonOptionalHolidays.FirstOrDefault()?.Name ?? "Public Holiday";
 
-        // 5. Pre-fetch shift template assignments and shiftdays for roster-based weekly off determination
-        var shiftAssignments = await _uow.ShiftAssignments.ToListAsync(
-            _uow.ShiftAssignments.Query()
-                .Where(sa => sa.IsActive && sa.StartDate <= effectiveTargetDate && (sa.EndDate == null || sa.EndDate >= effectiveTargetDate)),
-            ct);
-        var assignmentsByEmp = shiftAssignments
-            .GroupBy(sa => sa.EmployeeId)
-            .ToDictionary(g => g.Key, g => g.OrderByDescending(sa => sa.StartDate).First());
-
+        // 5. Pre-fetch shiftdays for template-based weekly off determination
         var targetDayOfWeek = effectiveTargetDate.DayOfWeek;
         var relevantShiftdays = await _uow.Shiftdays.ToListAsync(
             _uow.Shiftdays.Query().Where(sd => sd.DayOfWeek == targetDayOfWeek),
@@ -1146,7 +1249,7 @@ public sealed class AttendanceService : IAttendanceService
 
         foreach (var emp in activeEmployees)
         {
-            var isWeekOff = IsEmployeeWeekOff(emp, effectiveTargetDate, assignmentsByEmp, shiftdaysByTemplate);
+            var isWeekOff = IsEmployeeWeekOff(emp, effectiveTargetDate);
 
             if (attendanceByEmp.TryGetValue(emp.Id, out var record))
             {
@@ -1260,20 +1363,9 @@ public sealed class AttendanceService : IAttendanceService
             finalizedCount);
     }
 
-    private static bool IsEmployeeWeekOff(
-        Employee emp,
-        DateOnly date,
-        Dictionary<Guid, ShiftAssignment> assignmentsByEmp,
-        Dictionary<Guid, Shiftday> shiftdaysByTemplate)
+    private static bool IsEmployeeWeekOff(Employee emp, DateOnly date)
     {
-        // 1. Roster-based template assignment takes priority
-        if (assignmentsByEmp.TryGetValue(emp.Id, out var assignment) &&
-            shiftdaysByTemplate.TryGetValue(assignment.ShiftTemplateId, out var shiftday))
-        {
-            return shiftday.IsWeekOff;
-        }
-
-        // 2. Employee shift working days specification
+        // 1. Employee shift working days specification
         if (emp.Shift != null && !string.IsNullOrWhiteSpace(emp.Shift.WorkingDays))
         {
             var wd = emp.Shift.WorkingDays.Trim().ToLowerInvariant();
@@ -1294,7 +1386,7 @@ public sealed class AttendanceService : IAttendanceService
             }
         }
 
-        // 3. Fallback default: Saturday and Sunday
+        // 2. Fallback default: Saturday and Sunday
         return date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
     }
 

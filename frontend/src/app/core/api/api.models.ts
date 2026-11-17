@@ -201,6 +201,7 @@ export interface PayrollRun {
 export interface Payslip {
   id: string;
   employeeId: string;
+  employeeCode?: string;
   employeeName: string;
   department: string;
   month: number;
@@ -662,6 +663,9 @@ export interface AttendancePerson {
   department: string;
   designation?: string | null;
   checkInTime?: string | null;
+  checkOutTime?: string | null;
+  workHours?: number;
+  status?: string | null;
   leaveReason?: string | null;
 }
 

@@ -67,7 +67,7 @@ export interface KeyOptionItem {
       </button>
 
       @if (open()) {
-        <div class="csel-menu key-select-menu" style="display: block; max-height: 240px; overflow-y: auto; z-index: 1000;">
+        <div class="csel-menu key-select-menu" [class.drop-up]="dropUp()" style="display: block; max-height: 240px; overflow-y: auto; z-index: 1000;">
           @if (allowClear && innerValue()) {
             <div class="csel-opt text-muted" (click)="pickClear()" style="font-size: 12px; border-bottom: 1px solid var(--border);">
               <em>Clear selection</em>
@@ -83,7 +83,7 @@ export interface KeyOptionItem {
               No options available
             </div>
           } @else {
-            @for (opt of displayOptions(); track opt.key) {
+            @for (opt of displayOptions(); track (opt.key + '_' + opt.value + '_' + $index)) {
               <div
                 class="csel-opt"
                 [class.csel-active]="opt.value === innerValue() || opt.key === innerValue()"
@@ -109,6 +109,11 @@ export interface KeyOptionItem {
       .key-select-wrap {
         position: relative;
         display: inline-block;
+      }
+      .key-select-menu.drop-up {
+        top: auto !important;
+        bottom: calc(100% + 4px) !important;
+        box-shadow: 0 -10px 25px -5px rgba(0, 0, 0, 0.18), 0 -8px 10px -6px rgba(0, 0, 0, 0.1) !important;
       }
       .key-select-btn.disabled {
         opacity: 0.6;
@@ -249,11 +254,23 @@ export class KeyGroupSelectComponent implements OnInit, OnChanges, ControlValueA
     });
   }
 
+  protected readonly dropUp = signal(false);
+
   protected toggle(): void {
     if (this.disabledState()) return;
-    this.open.update((v) => !v);
-    if (this.open()) {
+    if (!this.open()) {
+      try {
+        const rect = (this.elementRef.nativeElement as HTMLElement).getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const shouldDropUp = spaceBelow < 240 && rect.top > spaceBelow;
+        this.dropUp.set(shouldDropUp);
+      } catch {
+        this.dropUp.set(false);
+      }
+      this.open.set(true);
       this.onTouched();
+    } else {
+      this.open.set(false);
     }
   }
 

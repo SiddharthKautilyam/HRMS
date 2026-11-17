@@ -5,6 +5,7 @@ import Chart from 'chart.js/auto';
 import { ApiService } from '../../core/api/api.service';
 import { AttendanceTrendPoint, DashboardStats } from '../../core/api/api.models';
 import { IconDirective } from '../../core/icons/icon.directive';
+import { SessionService } from '../../core/services/session.service';
 import { SafeHtmlPipe } from '../../shared/safe-html.pipe';
 
 interface Kpi {
@@ -18,13 +19,14 @@ interface Kpi {
   bars: number[];
 }
 
-interface Activity {
+interface ActivityItem {
   name: string;
   dept: string;
   action: string;
   date: string;
   status: string;
   id: string;
+  code: string;
   grade: string;
   join: string;
   salary: string;
@@ -40,19 +42,19 @@ interface Activity {
     <div class="hero-banner">
       <div>
         <div class="hero-title">
-          {{ greeting }}, Alex
+          {{ greeting }}, {{ userName() }}
           <svg style="display: inline; vertical-align: middle; margin-left: 4px" width="28" height="28" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M36.038 10.646c-.844-1.46-2.72-1.96-4.18-1.116-1.46.843-1.96 2.72-1.116 4.18l6.496 11.25-2.887 1.667-9.382-16.25c-.844-1.46-2.72-1.96-4.18-1.116-1.46.843-1.96 2.72-1.116 4.18l9.382 16.25-2.887 1.666-7.382-12.784c-.844-1.46-2.72-1.96-4.18-1.116-1.46.843-1.96 2.72-1.116 4.18l7.382 12.784-2.887 1.667-4.382-7.588c-.844-1.46-2.72-1.96-4.18-1.116-1.46.843-1.96 2.72-1.116 4.18l8.666 15.008c3.372 5.838 9.673 8.834 15.98 8.126l.06-.007c6.96-.78 12.44-6.22 13.274-13.174l1.426-11.752c.22-1.814-1.074-3.466-2.888-3.686-1.814-.22-3.466 1.074-3.686 2.888l-.714 5.882-2.998-5.192 5.498-9.52c.844-1.46.344-3.337-1.116-4.18-1.46-.844-3.337-.344-4.18 1.116l-3.498 6.058-3.498-6.058 1.748-3.027z" fill="#FBBF24" />
           </svg>
         </div>
-        <div class="hero-sub">{{ dateStr }} · Q3 Sprint Week 2 is underway.</div>
+        <div class="hero-sub">{{ dateStr }} · Company Overview &amp; Attendance Analytics.</div>
         <div style="display: flex; align-items: center; gap: 0">
           <span class="hero-status">All systems normal</span>
-          <span class="hero-sync">Last sync: 2 min ago</span>
+          <span class="hero-sync">Last sync: Just now</span>
         </div>
       </div>
       <div class="hero-btns">
-        <button class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 6px" (click)="go('/onboarding')">
+        <button class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 6px" (click)="go('/employees')">
           <span [appIcon]="'plus'"></span> Add Employee
         </button>
         <button class="btn btn-primary btn-sm" style="display: flex; align-items: center; gap: 6px" (click)="go('/reports')">
@@ -101,7 +103,7 @@ interface Activity {
           </div>
           <div style="display: flex; gap: 8px">
             <button class="btn btn-outline btn-sm" style="color: var(--p); border-color: var(--p)">This Week</button>
-            <button class="btn btn-outline btn-sm">Export</button>
+            <button class="btn btn-outline btn-sm" (click)="exportAttendanceTrend()">Export</button>
           </div>
         </div>
         <div class="card-body">
@@ -177,7 +179,7 @@ interface Activity {
                     <div class="avatar-placeholder avatar">{{ initials(r.name) }}</div>
                     <div>
                       <div style="font-weight: 600; font-size: 13px">{{ r.name }}</div>
-                      <div style="font-size: 13px; color: var(--muted)">{{ r.id }}</div>
+                      <div style="font-size: 13px; color: var(--muted)">{{ r.code || r.id }}</div>
                     </div>
                   </div>
                 </td>
@@ -310,6 +312,7 @@ interface Activity {
 export class AnalyticsAdminComponent implements OnInit, AfterViewInit {
   private readonly router = inject(Router);
   private readonly api = inject(ApiService);
+  private readonly session = inject(SessionService);
 
   private readonly attendCanvas = viewChild<ElementRef<HTMLCanvasElement>>('attendOverview');
   private readonly deptCanvas = viewChild<ElementRef<HTMLCanvasElement>>('deptChart');
@@ -320,13 +323,14 @@ export class AnalyticsAdminComponent implements OnInit, AfterViewInit {
 
   protected readonly greeting = AnalyticsAdminComponent.greet();
   protected readonly dateStr = AnalyticsAdminComponent.dateString();
+  protected readonly userName = computed(() => this.session.user()?.name || 'Administrator');
 
   protected readonly stats = signal<DashboardStats | null>(null);
   protected readonly trend = signal<AttendanceTrendPoint[]>([]);
   protected readonly depts = signal<string[]>([]);
   protected readonly deptData = signal<number[]>([]);
   protected readonly deptColors = ['#1e40af', '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe'];
-  protected readonly activity = signal<Activity[]>([]);
+  protected readonly activity = signal<ActivityItem[]>([]);
 
   protected readonly weekSummary = computed(() =>
     this.trend().map((point) => ({ d: point.label, p: `${point.present}` })),
@@ -388,7 +392,8 @@ export class AnalyticsAdminComponent implements OnInit, AfterViewInit {
             action: r.action,
             date: r.dateLabel,
             status: r.status,
-            id: r.employeeCode,
+            id: r.employeeId || r.employeeCode,
+            code: r.employeeCode,
             grade: '',
             join: '',
             salary: '',
@@ -464,36 +469,40 @@ export class AnalyticsAdminComponent implements OnInit, AfterViewInit {
     }
   }
 
-  protected barHeight(value: number, bars: number[]): number {
-    return Math.round((value / Math.max(...bars)) * 100);
+  protected exportAttendanceTrend(): void {
+    const trend = this.trend();
+    if (trend.length === 0) return;
+    const headers = ['Day', 'Present', 'Absent', 'Late'];
+    const rows = trend.map((t) => [t.label, t.present, t.absent, t.late]);
+    const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `attendance_trend_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
-  protected initials(name: string): string {
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('');
+  protected barHeight(value: number, bars: number[]): number {
+    const max = Math.max(...bars, 1);
+    return Math.max(15, Math.round((value / max) * 100));
+  }
+
+  protected initials(name?: string): string {
+    if (!name || name === '—') return 'HR';
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return 'HR';
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }
 
   protected activityClass(status: string): string {
     return `badge-${status === 'Active' ? 'success' : status === 'Pending' ? 'warning' : status === 'Alert' ? 'danger' : 'info'}`;
   }
 
-  protected viewProfile(r: Activity): void {
-    sessionStorage.setItem(
-      'empProfile',
-      JSON.stringify({
-        id: r.id,
-        name: r.name,
-        dept: r.dept,
-        grade: r.grade,
-        status: r.status,
-        join: r.join,
-        salary: r.salary,
-        email: r.email,
-      }),
-    );
-    void this.router.navigateByUrl('/employee-profile');
+  protected viewProfile(r: ActivityItem): void {
+    void this.router.navigate(['/employee-profile'], { queryParams: { id: r.id } });
   }
 
   protected go(path: string): void {

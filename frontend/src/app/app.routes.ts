@@ -131,8 +131,8 @@ export const routes: Routes = [
       },
       {
         path: 'roster',
-        data: { title: 'Shift Roster' },
-        loadComponent: () => import('./features/hr/shift.component').then((m) => m.ShiftComponent),
+        redirectTo: 'shift',
+        pathMatch: 'full',
       },
       {
         path: 'payroll',
@@ -163,6 +163,18 @@ export const routes: Routes = [
         path: 'reports',
         data: { title: 'Reports' },
         loadComponent: () => import('./features/hr/reports.component').then((m) => m.ReportsComponent),
+      },
+      {
+        path: 'announcements',
+        data: { title: 'Announcements' },
+        loadComponent: () =>
+          import('./features/employee/emp-announcements.component').then((m) => m.EmpAnnouncementsComponent),
+      },
+      {
+        path: 'notifications',
+        data: { title: 'Notifications' },
+        loadComponent: () =>
+          import('./features/notifications/notifications.component').then((m) => m.NotificationsComponent),
       },
 
       // Master setup
@@ -238,6 +250,12 @@ export const routes: Routes = [
         data: { title: 'Announcements' },
         loadComponent: () =>
           import('./features/employee/emp-announcements.component').then((m) => m.EmpAnnouncementsComponent),
+      },
+      {
+        path: 'me/notifications',
+        data: { title: 'Notifications' },
+        loadComponent: () =>
+          import('./features/notifications/notifications.component').then((m) => m.NotificationsComponent),
       },
       {
         path: 'me/settings',

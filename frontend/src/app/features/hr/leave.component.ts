@@ -1,6 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../core/api/api.service';
+import { EmployeeListItem } from '../../core/api/api.models';
 import { IconDirective } from '../../core/icons/icon.directive';
 import { PermissionService } from '../../core/services/permission.service';
 import { SessionService } from '../../core/services/session.service';
@@ -31,21 +33,17 @@ interface LeaveType {
 /** Leave Management — ported from pages/leave.html. */
 @Component({
   selector: 'app-leave',
-  imports: [CommonModule, IconDirective, SelectComponent],
+  imports: [CommonModule, FormsModule, IconDirective, SelectComponent],
   template: `
-    <div class="flex justify-between items-center" style="margin-bottom: 15px">
-      <div>
-        <div class="page-title">Leave Management</div>
-        <div class="page-subtitle">Apply, track and approve leave requests</div>
-      </div>
-      @if (!isSuperAdmin() && perms.canCreate('Leave')) {
+    @if (!isSuperAdmin() && perms.canCreate('Leave')) {
+      <div class="flex justify-end items-center" style="margin-bottom: 15px">
         <button class="btn btn-primary btn-sm" (click)="ui.open('applyModal')">+ Apply Leave</button>
-      }
-    </div>
+      </div>
+    }
 
     @if (isAdmin()) {
-      <div class="card" style="margin-bottom: 16px">
-        <div class="card-header">
+      <div class="card" style="margin-bottom: 16px; overflow: visible;">
+        <div class="card-header" style="overflow: visible;">
           <div class="card-title">Leave Types</div>
           @if (perms.canCreate('Leave')) {
             <button class="btn btn-primary btn-sm" (click)="openType(null)">+ Add Leave Type</button>
@@ -100,16 +98,60 @@ interface LeaveType {
       </div>
     }
 
-    <div class="card">
-      <div class="card-header" style="margin-bottom: 12px; flex-wrap: wrap; gap: 8px">
+    <div class="card" style="overflow: visible;">
+      <div class="card-header" style="margin-bottom: 12px; flex-wrap: wrap; gap: 8px; overflow: visible; position: relative; z-index: 30;">
         <div class="card-title">All Leave Requests</div>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center">
-          <input class="form-control" placeholder="Search employee..." style="width: 180px" [value]="search()" (input)="search.set($any($event.target).value)" />
-          <app-select [options]="typeOptions" [value]="typeFilter()" (valueChange)="typeFilter.set($event)" width="140px" />
+        <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center; overflow: visible; position: relative; z-index: 30;">
+          <!-- Instant Search Box with Icon, Clear Button, and Anti-Autofill -->
+          <div style="position: relative; display: flex; align-items: center;">
+            <span style="position: absolute; left: 10px; color: var(--muted); pointer-events: none; display: flex;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            </span>
+            <input 
+              #searchInput
+              type="search" 
+              id="leave_search_filter_query"
+              name="leave_search_filter_query"
+              class="form-control" 
+              placeholder="Search employee, type, reason..." 
+              style="width: 230px; font-size: 12px; padding: 6px 28px 6px 30px;"
+              [value]="search()"
+              (input)="onSearchInput($any($event.target).value)"
+              (change)="onSearchInput($any($event.target).value)"
+              (search)="onSearchInput($any($event.target).value)"
+              autocomplete="off"
+              autocorrect="off"
+              autocapitalize="off"
+              spellcheck="false"
+              data-lpignore="true"
+              data-1p-ignore="true"
+              data-bwignore="true"
+              data-form-type="other"
+              role="searchbox"
+            />
+            @if (search()) {
+              <button 
+                type="button" 
+                (click)="clearSearch()"
+                style="position: absolute; right: 8px; background: none; border: none; font-size: 13px; cursor: pointer; color: var(--muted); padding: 2px 4px; display: flex; align-items: center;"
+                title="Clear search"
+              >
+                ✕
+              </button>
+            }
+          </div>
+
+          <app-select [options]="typeOptions()" [value]="typeFilter()" (valueChange)="typeFilter.set($event)" width="150px" />
           <app-select [options]="statusFilterOptions" [value]="statusFilter()" (valueChange)="statusFilter.set($event)" width="125px" />
+
+          @if (search() || typeFilter() || statusFilter()) {
+            <button class="btn btn-ghost btn-sm" (click)="clearAllFilters()" style="font-size: 12px; color: var(--muted); text-decoration: underline;">
+              Clear Filters
+            </button>
+          }
         </div>
       </div>
-      <div class="table-wrap">
+      <div class="table-wrap" style="position: relative; z-index: 1; min-height: 180px;">
         <table>
           <thead>
             <tr>
@@ -150,8 +192,26 @@ interface LeaveType {
               </tr>
             } @empty {
               <tr>
-                <td colspan="8" style="text-align: center; padding: 24px; color: var(--muted);">
-                  No leave requests found.
+                <td colspan="8" style="text-align: center; padding: 36px 20px; color: var(--muted);">
+                  <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;">
+                    <div style="font-size: 13px; font-weight: 500;">
+                      @if (search() || typeFilter() || statusFilter()) {
+                        No leave requests found matching filters.
+                      } @else {
+                        No leave requests found.
+                      }
+                    </div>
+                    @if (search() || typeFilter() || statusFilter()) {
+                      <button 
+                        type="button" 
+                        class="btn btn-outline btn-sm btn-auto" 
+                        style="width: auto !important; height: auto !important; padding: 6px 14px !important; font-size: 12px; margin-top: 4px; display: inline-flex; align-items: center; gap: 6px;"
+                        (click)="clearAllFilters()"
+                      >
+                        <span [appIcon]="'x'"></span> Clear Filters
+                      </button>
+                    }
+                  </div>
                 </td>
               </tr>
             }
@@ -247,20 +307,40 @@ interface LeaveType {
           <button class="btn btn-ghost btn-sm" (click)="ui.close('applyModal')"><span [appIcon]="'x'"></span></button>
         </div>
         <div class="modal-body">
+          @if (isAdmin()) {
+            <div class="form-group">
+              <label class="form-label">Employee <span style="color: var(--danger)">*</span></label>
+              <select 
+                class="form-control" 
+                [ngModel]="applyEmployeeId()" 
+                (ngModelChange)="applyEmployeeId.set($event)"
+              >
+                <option value="">Select Employee...</option>
+                @for (emp of employees(); track emp.id) {
+                  <option [value]="emp.id">{{ emp.fullName }} ({{ emp.department }})</option>
+                }
+              </select>
+            </div>
+          }
           <div class="form-group">
-            <label class="form-label">Leave Type</label>
-            <app-select [options]="applyTypeOptions" [value]="applyType()" (valueChange)="applyType.set($event)" width="100%" />
+            <label class="form-label">Leave Type <span style="color: var(--danger)">*</span></label>
+            <app-select [options]="applyTypeOptions()" [value]="applyType()" (valueChange)="applyType.set($event)" width="100%" />
           </div>
           <div class="grid-2">
             <div class="form-group">
-              <label class="form-label">From Date</label>
+              <label class="form-label">From Date <span style="color: var(--danger)">*</span></label>
               <input class="form-control" type="date" [value]="applyFrom()" (input)="applyFrom.set($any($event.target).value)" />
             </div>
             <div class="form-group">
-              <label class="form-label">To Date</label>
+              <label class="form-label">To Date <span style="color: var(--danger)">*</span></label>
               <input class="form-control" type="date" [value]="applyTo()" (input)="applyTo.set($any($event.target).value)" />
             </div>
           </div>
+          @if (calculatedDays() > 0) {
+            <div style="font-size: 12px; color: var(--p); font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 6px;">
+              <span [appIcon]="'clock'"></span> Duration: {{ calculatedDays() }} day(s)
+            </div>
+          }
           <div class="form-group">
             <label class="form-label">Reason</label>
             <textarea class="form-control" rows="3" placeholder="Reason for leave..." [value]="applyReason()" (input)="applyReason.set($any($event.target).value)"></textarea>
@@ -290,10 +370,42 @@ interface LeaveType {
           display: none;
         }
       }
+      input[type="search"]::-webkit-search-decoration,
+      input[type="search"]::-webkit-search-cancel-button,
+      input[type="search"]::-webkit-search-results-button,
+      input[type="search"]::-webkit-search-results-decoration {
+        -webkit-appearance: none;
+        appearance: none;
+        display: none !important;
+      }
+      input[type="search"]::-ms-clear,
+      input[type="search"]::-ms-reveal {
+        display: none !important;
+        width: 0 !important;
+        height: 0 !important;
+      }
     `,
   ],
 })
-export class LeaveComponent implements OnInit {
+export class LeaveComponent implements OnInit, AfterViewInit {
+  @ViewChild('searchInput') set searchInputSetter(ref: ElementRef<HTMLInputElement> | undefined) {
+    this.searchInputRef = ref;
+    if (ref?.nativeElement && !this.search()) {
+      ref.nativeElement.value = '';
+      setTimeout(() => {
+        if (ref?.nativeElement && !this.search()) {
+          ref.nativeElement.value = '';
+        }
+      }, 50);
+      setTimeout(() => {
+        if (ref?.nativeElement && !this.search()) {
+          ref.nativeElement.value = '';
+        }
+      }, 250);
+    }
+  }
+  searchInputRef?: ElementRef<HTMLInputElement>;
+
   protected readonly ui = inject(UiService);
   protected readonly perms = inject(PermissionService);
   private readonly toast = inject(ToastService);
@@ -308,13 +420,6 @@ export class LeaveComponent implements OnInit {
   protected readonly typeFilter = signal('');
   protected readonly statusFilter = signal('');
 
-  protected readonly typeOptions: SelectOption[] = [
-    { v: '', l: 'All Types' },
-    { v: 'Annual', l: 'Annual' },
-    { v: 'Sick', l: 'Sick' },
-    { v: 'Emergency', l: 'Emergency' },
-  ];
-
   protected readonly statusFilterOptions: SelectOption[] = [
     { v: '', l: 'All Status' },
     { v: 'Pending', l: 'Pending' },
@@ -327,42 +432,115 @@ export class LeaveComponent implements OnInit {
     { v: 'no', l: 'No - Unpaid' },
   ];
 
-  protected readonly applyTypeOptions: SelectOption[] = [
-    { v: 'Annual Leave', l: 'Annual Leave' },
-    { v: 'Sick Leave', l: 'Sick Leave' },
-    { v: 'Emergency Leave', l: 'Emergency Leave' },
-    { v: 'Unpaid Leave', l: 'Unpaid Leave' },
-  ];
-
   protected readonly requests = signal<LeaveRequest[]>([]);
-
   protected readonly leaveTypes = signal<LeaveType[]>([]);
+  protected readonly employees = signal<EmployeeListItem[]>([]);
+
+  // Dynamically populated options from live leave types
+  protected readonly typeOptions = computed<SelectOption[]>(() => [
+    { v: '', l: 'All Types' },
+    ...this.leaveTypes().map((t) => ({ v: t.name, l: t.name })),
+  ]);
+
+  protected readonly applyTypeOptions = computed<SelectOption[]>(() =>
+    this.leaveTypes().map((t) => ({ v: t.name, l: `${t.name} (${t.days}d/yr - ${t.paid ? 'Paid' : 'Unpaid'})` })),
+  );
 
   protected readonly typeForm = signal<LeaveType>({ id: '', name: '', days: 0, paid: true, color: '#2563eb', desc: '' });
   protected readonly viewTarget = signal<LeaveRequest | null>(null);
 
   protected readonly applyType = signal('Annual Leave');
+  protected readonly applyEmployeeId = signal('');
   protected readonly applyFrom = signal('');
   protected readonly applyTo = signal('');
   protected readonly applyReason = signal('');
 
+  // Duration calculation for leave application
+  protected readonly calculatedDays = computed(() => {
+    const from = this.applyFrom();
+    const to = this.applyTo();
+    if (!from || !to) return 0;
+    const d1 = new Date(from);
+    const d2 = new Date(to);
+    if (isNaN(d1.getTime()) || isNaN(d2.getTime()) || d2 < d1) return 0;
+    const diffTime = Math.abs(d2.getTime() - d1.getTime());
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+  });
+
   protected readonly filtered = computed(() => {
-    const q = this.search().toLowerCase();
-    const t = this.typeFilter();
-    const s = this.statusFilter();
-    return this.requests().filter(
-      (r) => (!q || r.n.toLowerCase().includes(q)) && (!t || r.t === t) && (!s || r.s === s),
-    );
+    const q = this.search().toLowerCase().trim();
+    const t = this.typeFilter().toLowerCase().trim();
+    const s = this.statusFilter().toLowerCase().trim();
+
+    return this.requests().filter((r) => {
+      const matchSearch =
+        !q ||
+        r.n.toLowerCase().includes(q) ||
+        r.t.toLowerCase().includes(q) ||
+        r.r.toLowerCase().includes(q);
+
+      const matchType = !t || r.t.toLowerCase() === t || r.t.toLowerCase().includes(t);
+      const matchStatus = !s || r.s.toLowerCase() === s;
+
+      return matchSearch && matchType && matchStatus;
+    });
   });
 
   ngOnInit(): void {
     this.loadTypes();
     this.loadRequests();
+    this.loadEmployees();
+  }
+
+  ngAfterViewInit(): void {
+    // Prevent browser password/contact managers from autofilling into search box
+    const wipeAutofill = () => {
+      if (this.searchInputRef?.nativeElement && !this.search()) {
+        this.searchInputRef.nativeElement.value = '';
+      }
+    };
+    setTimeout(wipeAutofill, 50);
+    setTimeout(wipeAutofill, 150);
+    setTimeout(wipeAutofill, 300);
+    setTimeout(wipeAutofill, 600);
+    setTimeout(wipeAutofill, 1200);
+  }
+
+  protected onSearchInput(val: string): void {
+    this.search.set(val || '');
+  }
+
+  protected clearSearch(): void {
+    this.search.set('');
+    if (this.searchInputRef?.nativeElement) {
+      this.searchInputRef.nativeElement.value = '';
+    }
+  }
+
+  protected clearAllFilters(): void {
+    this.search.set('');
+    this.typeFilter.set('');
+    this.statusFilter.set('');
+    if (this.searchInputRef?.nativeElement) {
+      this.searchInputRef.nativeElement.value = '';
+    }
+  }
+
+  private loadEmployees(): void {
+    this.api.employees({ page: 1, pageSize: 100 }).subscribe({
+      next: (res) => {
+        this.employees.set(res.items);
+        if (res.items.length > 0 && !this.applyEmployeeId()) {
+          this.applyEmployeeId.set(res.items[0].id);
+        }
+      },
+      error: () => {},
+    });
   }
 
   private loadTypes(): void {
     this.api.leaveTypes().subscribe({
-      next: (types) =>
+      next: (types) => {
         this.leaveTypes.set(
           types.map((t) => ({
             id: t.id,
@@ -372,7 +550,11 @@ export class LeaveComponent implements OnInit {
             color: t.color,
             desc: t.description ?? '',
           })),
-        ),
+        );
+        if (types.length > 0 && !this.applyType()) {
+          this.applyType.set(types[0].name);
+        }
+      },
       error: () => {
         /* API offline — keep the demo leave types. */
       },
@@ -401,6 +583,16 @@ export class LeaveComponent implements OnInit {
   }
 
   private shortDate(value: string): string {
+    if (!value) return '';
+    // Prevent UTC timezone shifts on DateOnly YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}/.test(value)) {
+      const parts = value.split('T')[0].split('-');
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      const d = parseInt(parts[2], 10);
+      const date = new Date(y, m, d);
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
     const date = new Date(value);
     return Number.isNaN(date.getTime())
       ? value
@@ -453,7 +645,7 @@ export class LeaveComponent implements OnInit {
         );
         this.toast.show(status === 'Approved' ? 'Leave approved!' : 'Leave rejected', status === 'Approved' ? 'success' : 'danger');
       },
-      error: (error) => this.toast.show(error?.error?.title ?? 'Could not update the leave request.', 'danger'),
+      error: (error) => this.toast.show(error?.error?.detail || error?.error?.message || error?.error?.title || 'Could not update the leave request.', 'danger'),
     });
   }
 
@@ -501,11 +693,15 @@ export class LeaveComponent implements OnInit {
         this.toast.show(f.id ? 'Leave type updated!' : 'Leave type added!');
         this.loadTypes();
       },
-      error: (error) => this.toast.show(error?.error?.title ?? 'Could not save the leave type.', 'danger'),
+      error: (error) => this.toast.show(error?.error?.detail || error?.error?.message || error?.error?.title || 'Could not save the leave type.', 'danger'),
     });
   }
 
   protected deleteType(id: string): void {
+    if (!confirm('Are you sure you want to delete this leave type?')) {
+      return;
+    }
+
     if (!id || /^\d+$/.test(id)) {
       this.leaveTypes.update((list) => list.filter((x) => x.id !== id));
       this.toast.show('Leave type deleted', 'danger');
@@ -517,7 +713,7 @@ export class LeaveComponent implements OnInit {
         this.toast.show('Leave type deleted', 'danger');
         this.loadTypes();
       },
-      error: (error) => this.toast.show(error?.error?.title ?? 'Could not delete the leave type.', 'danger'),
+      error: (error) => this.toast.show(error?.error?.detail || error?.error?.message || error?.error?.title || 'Could not delete the leave type.', 'danger'),
     });
   }
 
@@ -531,21 +727,31 @@ export class LeaveComponent implements OnInit {
       return;
     }
 
+    if (to < from) {
+      this.toast.show('End date must be on or after start date.', 'danger');
+      return;
+    }
+
+    const employeeId = this.isAdmin() && this.applyEmployeeId() ? this.applyEmployeeId() : null;
+
     this.api
       .createLeaveRequest({
-        employeeId: null,
+        employeeId: employeeId,
         leaveTypeId: type.id,
         fromDate: from,
         toDate: to,
-        reason: this.applyReason() || 'Personal',
+        reason: this.applyReason().trim() || 'Personal',
       })
       .subscribe({
         next: () => {
           this.ui.close('applyModal');
           this.toast.show('Leave request submitted!');
+          this.applyReason.set('');
+          this.applyFrom.set('');
+          this.applyTo.set('');
           this.loadRequests();
         },
-        error: (error) => this.toast.show(error?.error?.title ?? 'Could not submit the leave request.', 'danger'),
+        error: (error) => this.toast.show(error?.error?.detail || error?.error?.message || error?.error?.title || 'Could not submit the leave request.', 'danger'),
       });
   }
 }

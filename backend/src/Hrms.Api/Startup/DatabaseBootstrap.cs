@@ -32,8 +32,7 @@ BEGIN
 END
 
 -- 2. Ensure existing static system roles have IsSystem = 1
-IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'Roles' AND COLUMN_NAME = 'IsSystem')
-    EXEC(N'UPDATE Roles SET IsSystem = 1 WHERE Name IN (''Super Admin'', ''Company Admin'', ''HR Manager'', ''Manager'', ''Employee'') 
+EXEC(N'UPDATE Roles SET IsSystem = 1 WHERE Name IN (''Super Admin'', ''Company Admin'', ''HR Manager'', ''Manager'', ''Employee'') 
    OR Code IN (''SuperAdmin'', ''CompanyAdmin'', ''HrManager'', ''Manager'', ''Employee'');');
 
 -- 3. Ensure NavigationItems.Code and NavigationItems.IsActive exist
@@ -96,6 +95,10 @@ IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'Leav
 -- 10. Ensure CompanySettings.MaxPunchDurationHours
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'CompanySettings' AND COLUMN_NAME = 'MaxPunchDurationHours')
     ALTER TABLE CompanySettings ADD MaxPunchDurationHours INT NOT NULL CONSTRAINT DF_CompanySettings_MaxPunchDurationHours DEFAULT 16;
+
+-- 11. Remove legacy ShiftAssignments table (Shift Roster Matrix removed)
+IF OBJECT_ID('ShiftAssignments', 'U') IS NOT NULL
+    DROP TABLE ShiftAssignments;
 ";
 
     public static async Task InitializeAsync(IServiceProvider services, IConfiguration configuration, CancellationToken ct = default)
@@ -129,6 +132,7 @@ IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'Comp
         await RunOneTimeKeyGroupCleanupMigrationAsync(tenant, DefaultCompanyCode, defaultDbName, logger, ct);
         await RunPunchAndTenantSettingsMigrationAsync(tenant, DefaultCompanyCode, defaultDbName, configuration, logger, ct);
         await DbSeeder.SeedAsync(tenant, hasher, isProduction, ct);
+        await EnsureShiftTemplatesSeededAsync(tenant, logger, ct);
 
         // In production, ensure initial SuperAdmin user if configured via environment
         if (isProduction)
@@ -181,6 +185,7 @@ IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'Comp
                         await tenantDb.Database.ExecuteSqlRawAsync(EnsureSchemaSql, ct);
                         await RunOneTimeKeyGroupCleanupMigrationAsync(tenantDb, company.Code, company.DatabaseName, logger, ct);
                         await RunPunchAndTenantSettingsMigrationAsync(tenantDb, company.Code, company.DatabaseName, configuration, logger, ct);
+                        await EnsureShiftTemplatesSeededAsync(tenantDb, logger, ct);
                         logger.LogInformation("Successfully updated schema on existing tenant database '{DatabaseName}'", company.DatabaseName);
                     }
                 }
@@ -524,6 +529,62 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_AttendanceRecords_Empl
         else
         {
             logger.LogWarning("No SuperAdmin exists and SUPERADMIN_EMAIL / SUPERADMIN_PASSWORD environment variables are not set. Set these variables or use the CLI setup command to create the initial administrator.");
+        }
+    }
+
+    private static async Task EnsureShiftTemplatesSeededAsync(
+        HrmsDbContext db,
+        ILogger logger,
+        CancellationToken ct)
+    {
+        try
+        {
+            if (!await db.ShiftTemplates.AnyAsync(ct))
+            {
+                var shifts = await db.Shifts.ToListAsync(ct);
+                if (shifts.Count > 0)
+                {
+                    foreach (var s in shifts)
+                    {
+                        var code = s.Name switch
+                        {
+                            "Morning Shift" => "MS",
+                            "Evening Shift" => "ES",
+                            "Night Shift" => "NS",
+                            _ => string.Concat(s.Name.Split(' ').Select(w => w.FirstOrDefault())).ToUpper()
+                        };
+                        var tmpl = new ShiftTemplate
+                        {
+                            Name = s.Name,
+                            Description = $"Code: {code} | {s.WorkingDays ?? "Mon - Fri"}",
+                            GracePeriodMinutes = s.LateGraceMinutes,
+                            HalfDayHours = s.DailyHours > 0 ? (decimal)s.DailyHours / 2m : 4.5m,
+                            FullDayHours = s.DailyHours > 0 ? (decimal)s.DailyHours : 9.0m,
+                            IsDefault = s.Name.Contains("Morning", StringComparison.OrdinalIgnoreCase),
+                            IsNightShift = s.Name.Contains("Night", StringComparison.OrdinalIgnoreCase),
+                        };
+                        db.ShiftTemplates.Add(tmpl);
+                        foreach (DayOfWeek dow in new[] { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday })
+                        {
+                            db.Shiftdays.Add(new Shiftday
+                            {
+                                ShiftTemplateId = tmpl.Id,
+                                DayOfWeek = dow,
+                                StartTime = s.StartTime,
+                                EndTime = s.EndTime,
+                                IsWeekOff = false,
+                                BreakMinutes = 60
+                            });
+                        }
+                    }
+                    await db.SaveChangesAsync(ct);
+                    logger.LogInformation("Seeded {Count} shift templates into tenant database.", shifts.Count);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to check or seed shift templates.");
         }
     }
 }

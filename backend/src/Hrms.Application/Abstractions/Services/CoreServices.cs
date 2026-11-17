@@ -39,6 +39,14 @@ public interface INotificationService
 
     Task MarkReadAsync(Guid id, CancellationToken ct = default);
 
+    Task MarkAllReadAsync(CancellationToken ct = default);
+
+    Task ClearAllAsync(CancellationToken ct = default);
+
+    Task DeleteAsync(Guid id, CancellationToken ct = default);
+
+    Task ToggleReadAsync(Guid id, CancellationToken ct = default);
+
     Task<IReadOnlyList<NotificationPreferenceDto>> GetPreferencesAsync(CancellationToken ct = default);
 
     Task<NotificationPreferenceDto> UpdatePreferenceAsync(string id, bool enabled, CancellationToken ct = default);
@@ -97,7 +105,7 @@ public interface IAttendanceService
 
     Task<IReadOnlyList<EmployeePunchDto>> GetTodayPunchesAsync(Guid? employeeId, CancellationToken ct = default);
 
-    Task<TodayAttendanceOverviewDto> GetTodayOverviewAsync(CancellationToken ct = default);
+    Task<TodayAttendanceOverviewDto> GetTodayOverviewAsync(DateOnly? targetDate = null, CancellationToken ct = default);
 
     Task<IReadOnlyList<EnrolledFaceDto>> GetEnrolledFacesAsync(CancellationToken ct = default);
 

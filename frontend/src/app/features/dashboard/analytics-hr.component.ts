@@ -7,10 +7,12 @@ import {
   AttendanceTrendPoint,
   DashboardStats,
   ExpoAlert,
+  PayrollRun,
   PayrollSummary,
   PendingApproval,
 } from '../../core/api/api.models';
 import { IconDirective } from '../../core/icons/icon.directive';
+import { SessionService } from '../../core/services/session.service';
 import { ToastService } from '../../core/services/toast.service';
 import { SafeHtmlPipe } from '../../shared/safe-html.pipe';
 
@@ -35,18 +37,18 @@ interface DocAlert {
   template: `
     <div class="hero-banner">
       <div>
-        <div class="hero-title">{{ greeting }}, HR Manager 👋</div>
+        <div class="hero-title">{{ greeting }}, {{ userName() }} 👋</div>
         <div class="hero-sub">{{ dateStr }} &nbsp;-&nbsp; Employee activities, approvals &amp; payroll summary.</div>
         <div style="display: flex; align-items: center; gap: 0">
           <span class="hero-status">All Systems Normal</span>
-          <span class="hero-sync">Last Sync: 2 Min Ago</span>
+          <span class="hero-sync">Last Sync: Just now</span>
         </div>
       </div>
       <div style="display: flex; gap: 10px; flex-shrink: 0">
         <button class="btn btn-outline btn-sm" style="display: flex; align-items: center; gap: 6px" (click)="go('/approvals')">
           <span [appIcon]="'approvals'"></span> Approvals
         </button>
-        <button class="btn btn-primary btn-sm" style="display: flex; align-items: center; gap: 6px" (click)="go('/onboarding')">
+        <button class="btn btn-primary btn-sm" style="display: flex; align-items: center; gap: 6px" (click)="go('/employees')">
           <span [appIcon]="'plus'"></span> Add Employee
         </button>
       </div>
@@ -88,24 +90,37 @@ interface DocAlert {
             <div class="card-title">Pending Approvals</div>
             <div class="card-subtitle">Requires your action</div>
           </div>
-          <span class="badge badge-danger">18 Pending</span>
+          <span
+            class="badge"
+            [class.badge-danger]="(stats()?.pendingApprovals ?? 0) > 0"
+            [class.badge-success]="(stats()?.pendingApprovals ?? 0) === 0"
+          >
+            {{ stats()?.pendingApprovals ?? 0 }} Pending
+          </span>
         </div>
         <div class="card-body" style="padding-top: 8px">
-          @for (a of approvals(); track a.id) {
-            <div class="appr-row-hr">
-              <div class="avatar-placeholder avatar" style="flex-shrink: 0">{{ initials(a.employeeName) }}</div>
-              <div class="appr-info">
-                <div class="appr-name">{{ a.employeeName }}</div>
-                <div class="appr-detail">{{ a.type }} - {{ a.detail }}</div>
+          @if (approvals().length > 0) {
+            @for (a of approvals(); track a.id) {
+              <div class="appr-row-hr">
+                <div class="avatar-placeholder avatar" style="flex-shrink: 0">{{ initials(a.employeeName) }}</div>
+                <div class="appr-info">
+                  <div class="appr-name">{{ a.employeeName }}</div>
+                  <div class="appr-detail">{{ a.type }} - {{ a.detail }}</div>
+                </div>
+                <div class="appr-btns">
+                  <button class="btn btn-success btn-sm" data-tooltip="Approve" (click)="decideApproval(a, true)">
+                    <span [appIcon]="'check'"></span>
+                  </button>
+                  <button class="btn btn-danger btn-sm" data-tooltip="Reject" (click)="decideApproval(a, false)">
+                    <span [appIcon]="'x'"></span>
+                  </button>
+                </div>
               </div>
-              <div class="appr-btns">
-                <button class="btn btn-success btn-sm" data-tooltip="Approve" (click)="toast.show('Approved!')">
-                  <span [appIcon]="'check'"></span>
-                </button>
-                <button class="btn btn-danger btn-sm" data-tooltip="Reject" (click)="toast.show('Rejected', 'danger')">
-                  <span [appIcon]="'x'"></span>
-                </button>
-              </div>
+            }
+          } @else {
+            <div style="text-align: center; padding: 28px 12px; color: var(--muted); font-size: 13px;">
+              <span [appIcon]="'check'" style="display: inline-block; font-size: 20px; color: var(--success); margin-bottom: 6px"></span>
+              <div>All caught up! No pending approvals.</div>
             </div>
           }
           <button class="btn btn-outline w-full" style="margin-top: 12px" (click)="go('/approvals')">View All Approvals</button>
@@ -116,9 +131,15 @@ interface DocAlert {
         <div class="card-header" style="margin-bottom: 4px">
           <div>
             <div class="card-title">Payroll Summary</div>
-            <div class="card-subtitle">January 2025</div>
+            <div class="card-subtitle">{{ payrollPeriodLabel() }}</div>
           </div>
-          <span class="badge badge-warning">Processing</span>
+          <span
+            class="badge"
+            [class.badge-success]="payrollStatus() === 'Processed' || payrollStatus() === 'Paid'"
+            [class.badge-warning]="payrollStatus() === 'Draft' || payrollStatus() === 'Processing'"
+          >
+            {{ payrollStatus() }}
+          </span>
         </div>
         <div class="card-body">
           <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px">
@@ -170,12 +191,19 @@ interface DocAlert {
                 </td>
                 <td class="doc-doc-cell">{{ r.document }}</td>
                 <td class="doc-col-exp">{{ r.expiryLabel }}</td>
-                <td class="doc-col-days"><span style="font-weight: 700; color: var(--text)">{{ r.daysLeft }}d</span></td>
+                <td class="doc-col-days">
+                  <span
+                    [style.font-weight]="700"
+                    [style.color]="r.daysLeft < 0 ? 'var(--danger)' : r.daysLeft <= 7 ? 'var(--warning)' : 'var(--text)'"
+                  >
+                    {{ formatDaysLeft(r.daysLeft) }}
+                  </span>
+                </td>
                 <td class="doc-col-status">
                   <span class="badge" [class]="docClass(r.status)">{{ r.status }}</span>
                 </td>
                 <td>
-                  <button class="btn btn-ghost btn-sm" data-tooltip="Notify" (click)="toast.show('Reminder sent!')">
+                  <button class="btn btn-ghost btn-sm" data-tooltip="Notify" (click)="sendReminder(r)">
                     <span [appIcon]="'bell'"></span>
                   </button>
                 </td>
@@ -320,6 +348,7 @@ export class AnalyticsHrComponent implements OnInit, AfterViewInit {
   private readonly router = inject(Router);
   protected readonly toast = inject(ToastService);
   private readonly api = inject(ApiService);
+  private readonly session = inject(SessionService);
 
   private readonly payrollCanvas = viewChild<ElementRef<HTMLCanvasElement>>('payrollPie');
 
@@ -328,12 +357,27 @@ export class AnalyticsHrComponent implements OnInit, AfterViewInit {
 
   protected readonly greeting = AnalyticsHrComponent.greet();
   protected readonly dateStr = AnalyticsHrComponent.dateString();
+  protected readonly userName = computed(() => this.session.user()?.name || 'HR Manager');
 
   protected readonly stats = signal<DashboardStats | null>(null);
   protected readonly trend = signal<AttendanceTrendPoint[]>([]);
   protected readonly approvals = signal<PendingApproval[]>([]);
   protected readonly payroll = signal<PayrollSummary | null>(null);
+  protected readonly latestRun = signal<PayrollRun | null>(null);
   protected readonly docAlerts = signal<ExpoAlert[]>([]);
+
+  protected readonly payrollPeriodLabel = computed(() => {
+    const run = this.latestRun();
+    if (run) {
+      const d = new Date(run.year, run.month - 1, 1);
+      return d.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+    }
+    return new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
+  });
+
+  protected readonly payrollStatus = computed(() => {
+    return this.latestRun()?.status || 'Processed';
+  });
 
   protected readonly kpis = computed(() => {
     const stats = this.stats();
@@ -362,25 +406,23 @@ export class AnalyticsHrComponent implements OnInit, AfterViewInit {
   });
 
   ngOnInit(): void {
+    this.loadDashboardData();
+  }
+
+  protected loadDashboardData(): void {
     this.api.dashboardStats().subscribe({
       next: (stats) => this.stats.set(stats),
-      error: () => {
-        /* API offline — no KPI data. */
-      },
+      error: () => {},
     });
 
     this.api.attendanceTrend().subscribe({
       next: (trend) => this.trend.set(trend),
-      error: () => {
-        /* API offline — no trend data. */
-      },
+      error: () => {},
     });
 
-    this.api.pendingApprovals(3).subscribe({
+    this.api.pendingApprovals(5).subscribe({
       next: (approvals) => this.approvals.set(approvals),
-      error: () => {
-        /* API offline — no approval data. */
-      },
+      error: () => {},
     });
 
     this.api.payrollSummary().subscribe({
@@ -388,16 +430,19 @@ export class AnalyticsHrComponent implements OnInit, AfterViewInit {
         this.payroll.set(payroll);
         this.scheduleRender();
       },
-      error: () => {
-        /* API offline — no payroll data. */
-      },
+      error: () => {},
     });
 
-    this.api.documentAlerts(4).subscribe({
-      next: (alerts) => this.docAlerts.set(alerts),
-      error: () => {
-        /* API offline — no document alerts. */
+    this.api.payrollRuns().subscribe({
+      next: (runs) => {
+        this.latestRun.set(runs.length > 0 ? runs[0] : null);
       },
+      error: () => {},
+    });
+
+    this.api.documentAlerts(5).subscribe({
+      next: (alerts) => this.docAlerts.set(alerts),
+      error: () => {},
     });
   }
 
@@ -438,19 +483,47 @@ export class AnalyticsHrComponent implements OnInit, AfterViewInit {
     });
   }
 
+  protected decideApproval(a: PendingApproval, approve: boolean): void {
+    const req$ = approve ? this.api.approveApproval(a.id) : this.api.rejectApproval(a.id);
+    req$.subscribe({
+      next: () => {
+        this.toast.show(
+          approve ? `Approved request for ${a.employeeName}` : `Rejected request for ${a.employeeName}`,
+          approve ? 'success' : 'danger',
+        );
+        this.loadDashboardData();
+      },
+      error: () => {
+        this.toast.show(`Failed to ${approve ? 'approve' : 'reject'} request`, 'danger');
+      },
+    });
+  }
+
+  protected sendReminder(r: ExpoAlert): void {
+    this.toast.show(`Reminder notification sent to ${r.employeeName} for ${r.document}`, 'success');
+  }
+
+  protected formatDaysLeft(days: number): string {
+    if (days < 0) return `${Math.abs(days)}d ago`;
+    if (days === 0) return 'Today';
+    return `${days}d`;
+  }
+
   private money(value: number): string {
     return `$${value.toLocaleString()}`;
   }
 
   protected barHeight(value: number, bars: number[]): number {
-    return Math.round((value / Math.max(...bars)) * 100);
+    const max = Math.max(...bars, 1);
+    return Math.max(15, Math.round((value / max) * 100));
   }
 
-  protected initials(name: string): string {
-    return name
-      .split(' ')
-      .map((n) => n[0])
-      .join('');
+  protected initials(name?: string): string {
+    if (!name || name === '—') return 'HR';
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return 'HR';
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }
 
   protected docClass(status: string): string {

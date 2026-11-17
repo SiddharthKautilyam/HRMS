@@ -128,7 +128,11 @@ public sealed class LeaveRequestRepository : Repository<LeaveRequest>, ILeaveReq
             var term = search.Trim();
             query = query.Where(l =>
                 EF.Functions.Like(l.Employee!.FirstName, $"%{term}%") ||
-                EF.Functions.Like(l.Employee!.LastName, $"%{term}%"));
+                EF.Functions.Like(l.Employee!.LastName, $"%{term}%") ||
+                EF.Functions.Like((l.Employee!.FirstName + " " + l.Employee!.LastName), $"%{term}%") ||
+                EF.Functions.Like(l.Employee!.EmployeeCode, $"%{term}%") ||
+                (l.LeaveType != null && EF.Functions.Like(l.LeaveType.Name, $"%{term}%")) ||
+                EF.Functions.Like(l.Reason, $"%{term}%"));
         }
 
         if (status is { } leaveStatus)

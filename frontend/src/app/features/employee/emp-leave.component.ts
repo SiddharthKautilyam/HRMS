@@ -29,11 +29,7 @@ interface LeaveHistory {
   selector: 'app-emp-leave',
   imports: [CommonModule, IconDirective, SelectComponent],
   template: `
-    <div class="flex justify-between items-center" style="margin-bottom: 24px">
-      <div>
-        <div class="page-title">Leave Management</div>
-        <div class="page-subtitle">Apply and track your leave requests</div>
-      </div>
+    <div class="flex justify-end items-center" style="margin-bottom: 24px">
       <button class="btn btn-primary btn-sm" style="display: flex; align-items: center; gap: 6px" (click)="ui.open('applyModal')">
         <span [appIcon]="'plus'"></span> Apply Leave
       </button>

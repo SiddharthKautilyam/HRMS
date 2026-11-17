@@ -44,6 +44,55 @@ public sealed class NotificationService : INotificationService
         await _uow.SaveChangesAsync(ct);
     }
 
+    public async Task MarkAllReadAsync(CancellationToken ct = default)
+    {
+        var userId = _currentUser.UserId;
+        var unread = await _uow.Notifications.ToListAsync(
+            _uow.Notifications.Query()
+                .Where(n => !n.IsRead && (n.UserId == null || n.UserId == userId)),
+            ct);
+
+        foreach (var item in unread)
+        {
+            item.IsRead = true;
+            _uow.Notifications.Update(item);
+        }
+
+        await _uow.SaveChangesAsync(ct);
+    }
+
+    public async Task ClearAllAsync(CancellationToken ct = default)
+    {
+        var userId = _currentUser.UserId;
+        var items = await _uow.Notifications.ToListAsync(
+            _uow.Notifications.Query()
+                .Where(n => n.UserId == null || n.UserId == userId),
+            ct);
+
+        _uow.Notifications.RemoveRange(items);
+        await _uow.SaveChangesAsync(ct);
+    }
+
+    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        var item = await _uow.Notifications.GetByIdAsync(id, ct);
+        if (item != null)
+        {
+            _uow.Notifications.Remove(item);
+            await _uow.SaveChangesAsync(ct);
+        }
+    }
+
+    public async Task ToggleReadAsync(Guid id, CancellationToken ct = default)
+    {
+        var notification = await _uow.Notifications.GetByIdAsync(id, ct)
+                           ?? throw NotFoundException.For("Notification", id);
+
+        notification.IsRead = !notification.IsRead;
+        _uow.Notifications.Update(notification);
+        await _uow.SaveChangesAsync(ct);
+    }
+
     public async Task<IReadOnlyList<NotificationPreferenceDto>> GetPreferencesAsync(CancellationToken ct = default)
     {
         var userId = _currentUser.UserId;

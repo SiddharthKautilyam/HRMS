@@ -5,6 +5,7 @@ import { DocumentDto } from '../../core/api/api.models';
 import { IconDirective } from '../../core/icons/icon.directive';
 import { ToastService } from '../../core/services/toast.service';
 import { UiService } from '../../core/services/ui.service';
+import { triggerDocumentDownload } from '../../core/utils/document-download.util';
 
 interface DocRow {
   doc: string;
@@ -15,12 +16,15 @@ interface DocRow {
   num: string;
   issuedBy: string;
   notes: string;
+  fileUrl?: string | null;
+  fileSize?: string | null;
 }
 
 interface CompanyDoc {
   name: string;
   size: string;
   date: string;
+  fileUrl?: string | null;
 }
 
 /** My Documents — ported from pages/emp-documents.html. */
@@ -28,11 +32,7 @@ interface CompanyDoc {
   selector: 'app-emp-documents',
   imports: [CommonModule, IconDirective],
   template: `
-    <div class="flex justify-between items-center" style="margin-bottom: 15px">
-      <div>
-        <div class="page-title">My Documents</div>
-        <div class="page-subtitle">Manage your personal and company documents</div>
-      </div>
+    <div class="flex justify-end items-center" style="margin-bottom: 15px">
       <button class="btn btn-primary btn-sm" style="display: flex; align-items: center; gap: 6px" (click)="toast.show('Upload dialog')">
         <span [appIcon]="'upload2'"></span> Upload
       </button>
@@ -69,7 +69,7 @@ interface CompanyDoc {
                     <td>
                       <div style="display: flex; gap: 6px">
                         <button class="btn btn-ghost btn-sm" data-tooltip="View" (click)="view(r)"><span [appIcon]="'eye'"></span></button>
-                        <button class="btn btn-ghost btn-sm" data-tooltip="Download" (click)="toast.show('Downloading ' + r.doc + '...')"><span [appIcon]="'download'"></span></button>
+                        <button class="btn btn-ghost btn-sm" data-tooltip="Download" (click)="downloadMyDoc(r)"><span [appIcon]="'download'"></span></button>
                       </div>
                     </td>
                   </tr>
@@ -92,7 +92,7 @@ interface CompanyDoc {
                   <div style="font-size: 14px; font-weight: 600; margin-bottom: 4px">{{ d.name }}</div>
                   <div style="font-size: 13px; color: var(--muted)">{{ d.size }} · {{ d.date }}</div>
                 </div>
-                <button class="btn btn-ghost btn-sm" data-tooltip="Download" (click)="toast.show('Downloading...')"><span [appIcon]="'download'"></span></button>
+                <button class="btn btn-ghost btn-sm" data-tooltip="Download" (click)="downloadCompanyDoc(d)"><span [appIcon]="'download'"></span></button>
               </div>
             }
           </div>
@@ -111,7 +111,7 @@ interface CompanyDoc {
         </div>
         @if (viewTarget(); as r) {
           <div class="modal-body">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px;">
               @for (f of fields(r); track f[0]) {
                 <div style="background: var(--bg); border-radius: 8px; padding: 10px">
                   <div style="font-size: 11px; color: var(--muted); font-weight: 600; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em">
@@ -121,6 +121,18 @@ interface CompanyDoc {
                 </div>
               }
             </div>
+
+            @if (r.fileUrl && (r.fileUrl.startsWith('data:image') || r.fileUrl.endsWith('.jpg') || r.fileUrl.endsWith('.png'))) {
+              <div style="text-align: center; background: #0f172a; border-radius: 8px; padding: 12px; margin-bottom: 12px; max-height: 240px; overflow: hidden;">
+                <img [src]="r.fileUrl" alt="Document Preview" style="max-height: 220px; max-width: 100%; object-fit: contain; border-radius: 6px;" />
+              </div>
+            }
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-outline" (click)="ui.close('docModal')">Close</button>
+            <button class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 6px;" (click)="downloadMyDoc(r)">
+              <span [appIcon]="'download'"></span> Download Document
+            </button>
           </div>
         }
       </div>
@@ -147,15 +159,21 @@ export class EmpDocumentsComponent implements OnInit {
   protected readonly docs = signal<DocRow[]>([]);
   protected readonly companyDocs = signal<CompanyDoc[]>([]);
 
+  private readonly currentEmpName = signal<string>('Employee');
+  private readonly currentEmpCode = signal<string>('EMP');
+
   ngOnInit(): void {
     this.api.employeeMe().subscribe({
-      next: (employee) =>
+      next: (employee) => {
+        this.currentEmpName.set(employee.fullName || `${employee.firstName} ${employee.lastName}`);
+        this.currentEmpCode.set(employee.employeeCode || 'EMP');
         this.api.documents({ employeeId: employee.id }).subscribe({
           next: (rows) => this.docs.set(rows.map((row) => this.toRow(row))),
           error: () => {
             /* API offline — no personal documents. */
           },
-        }),
+        });
+      },
       error: () => {
         /* API offline — no personal documents. */
       },
@@ -166,7 +184,7 @@ export class EmpDocumentsComponent implements OnInit {
         this.companyDocs.set(
           rows
             .filter((row) => row.isCompanyDocument)
-            .map((row) => ({ name: row.name, size: row.fileSize ?? '—', date: row.issueDate ?? '—' })),
+            .map((row) => ({ name: row.name, size: row.fileSize ?? '—', date: row.issueDate ?? '—', fileUrl: row.fileUrl ?? null })),
         ),
       error: () => {
         /* API offline — no company documents. */
@@ -184,7 +202,32 @@ export class EmpDocumentsComponent implements OnInit {
       num: row.documentNumber ?? '—',
       issuedBy: row.issuedBy ?? '—',
       notes: row.notes ?? '—',
+      fileUrl: row.fileUrl ?? null,
+      fileSize: row.fileSize ?? null,
     };
+  }
+
+  protected downloadMyDoc(r: DocRow): void {
+    triggerDocumentDownload(r.doc, r.fileUrl, {
+      employeeName: this.currentEmpName(),
+      employeeCode: this.currentEmpCode(),
+      issueDate: r.iss,
+      expiryDate: r.exp,
+      status: r.s,
+      type: r.type,
+    });
+    this.toast.show(`Downloaded ${r.doc}`, 'success');
+  }
+
+  protected downloadCompanyDoc(d: CompanyDoc): void {
+    triggerDocumentDownload(d.name, d.fileUrl, {
+      employeeName: 'All Employees',
+      employeeCode: 'COMPANY',
+      issueDate: d.date,
+      status: 'Active',
+      type: 'Company Policy',
+    });
+    this.toast.show(`Downloaded ${d.name}`, 'success');
   }
 
   protected fields(r: DocRow): [string, string][] {

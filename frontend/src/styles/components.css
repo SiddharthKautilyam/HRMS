@@ -107,7 +107,7 @@ a:focus-visible {
   border-radius: var(--r);
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
-  overflow: hidden;
+  overflow: visible;
 }
 .card-header {
   padding: 14px 16px;
@@ -115,6 +115,8 @@ a:focus-visible {
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--border);
+  position: relative;
+  z-index: 20;
 }
 .card-body {
   padding: 16px;
@@ -764,6 +766,9 @@ body.modal-open [data-tooltip]::after {
 .justify-between {
   justify-content: space-between;
 }
+.justify-end {
+  justify-content: flex-end;
+}
 .gap-2 {
   gap: 8px;
 }
@@ -836,9 +841,9 @@ body.modal-open [data-tooltip]::after {
   border-color: var(--success);
 }
 /* Keep old classes working too */
-tbody td .btn-ghost,
-tbody td .btn-success,
-tbody td .btn-danger {
+tbody td .btn-ghost:not(.btn-auto),
+tbody td .btn-success:not(.btn-auto),
+tbody td .btn-danger:not(.btn-auto) {
   width: 28px;
   height: 28px;
   padding: 0;
@@ -1006,4 +1011,21 @@ tbody td > div:not(.table-avatar) {
     padding: 7px 10px;
     font-size: 12px;
   }
+}
+
+/* Suppress browser native clear/cancel buttons on search inputs to prevent duplicate "x" buttons */
+input[type="search"]::-webkit-search-decoration,
+input[type="search"]::-webkit-search-cancel-button,
+input[type="search"]::-webkit-search-results-button,
+input[type="search"]::-webkit-search-results-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none !important;
+}
+
+input[type="search"]::-ms-clear,
+input[type="search"]::-ms-reveal {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }

@@ -123,7 +123,9 @@
           style="position: relative"
         >
           <span [appIcon]="'bell'"></span>
-          <span class="notif-dot"></span>
+          @if (unreadCount() > 0) {
+            <span class="notif-dot"></span>
+          }
         </div>
         <div
           class="header-btn punch-btn"
@@ -166,32 +168,47 @@
     >
   </div>
   <div style="max-height: 360px; overflow-y: auto">
-    @for (n of notifications(); track n.title) {
+    @for (n of notifications(); track n.id) {
       <div
-        style="display: flex; align-items: flex-start; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--border); cursor: pointer; transition: .15s"
+        style="display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); cursor: pointer; transition: .15s"
         [style.background]="n.unread ? 'rgba(37,99,235,.06)' : 'var(--surface)'"
         (click)="markRead(n)"
       >
-        <div style="font-size: 18px; flex-shrink: 0; margin-top: 1px" [innerHTML]="n.icon | safeHtml"></div>
+        <span style="font-size: 15px; margin-top: 2px; flex-shrink: 0">
+          @if (n.category === 'Approval') { 📋 }
+          @else if (n.category === 'Attendance') { ⏰ }
+          @else if (n.category === 'Policy') { 📢 }
+          @else if (n.category === 'Birthday') { 🎂 }
+          @else if (n.category === 'Document') { 📄 }
+          @else if (n.category === 'Payroll') { 💳 }
+          @else { 🔔 }
+        </span>
         <div style="flex: 1; min-width: 0">
           <div
-            style="font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 2px; display: flex; align-items: center; gap: 6px"
+            style="font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 2px; display: flex; align-items: center; justify-content: space-between; gap: 6px"
           >
-            {{ n.title }}
+            <span>{{ n.title }}</span>
             @if (n.unread) {
               <span
                 style="width: 6px; height: 6px; border-radius: 50%; background: var(--p); display: inline-block; flex-shrink: 0"
               ></span>
             }
           </div>
-          <div style="font-size: 13px; color: var(--muted); line-height: 1.4">{{ n.message }}</div>
-          <div style="font-size: 11px; color: var(--light); margin-top: 3px">{{ n.time }}</div>
+          <div style="font-size: 12px; color: var(--muted); line-height: 1.4">{{ n.message }}</div>
+          <div style="font-size: 11px; color: var(--light, #94a3b8); margin-top: 3px">{{ n.time }}</div>
         </div>
+      </div>
+    } @empty {
+      <div style="padding: 28px 16px; text-align: center; color: var(--muted); font-size: 13px;">
+        No notifications right now.
       </div>
     }
   </div>
   <div style="padding: 10px 16px; text-align: center; border-top: 1px solid var(--border)">
-    <button style="font-size: 12px; font-weight: 600; color: var(--p); background: none; border: none; cursor: pointer">
+    <button
+      (click)="viewAllNotifications()"
+      style="font-size: 12px; font-weight: 600; color: var(--p); background: none; border: none; cursor: pointer; width: 100%; padding: 4px;"
+    >
       View All Notifications
     </button>
   </div>

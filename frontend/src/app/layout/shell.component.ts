@@ -14,6 +14,7 @@ import { ThemeService } from '../core/services/theme.service';
 import { ToastService } from '../core/services/toast.service';
 import { UiService } from '../core/services/ui.service';
 import { PermissionService } from '../core/services/permission.service';
+import { NotificationStateService, DetailedNotification } from '../core/services/notification-state.service';
 import { SafeHtmlPipe } from '../shared/safe-html.pipe';
 import { FacePunchModalComponent } from '../shared/face-punch-modal.component';
 
@@ -46,6 +47,7 @@ const MASTER_NAV_CATALOGUE: MasterNavItem[] = [
   { label: 'Onboarding', section: 'HR Modules', icon: 'onboarding', path: '/onboarding', empPath: '/onboarding' },
   { label: 'Documents', section: 'HR Modules', icon: 'documents', path: '/documents', empPath: '/me/documents' },
   { label: 'Approvals', section: 'HR Modules', icon: 'approvals', path: '/approvals', empPath: '/approvals' },
+  { label: 'Announcements', section: 'HR Modules', icon: 'bell', path: '/announcements', empPath: '/me/announcements' },
 
   // Master Setup
   { label: 'Settings', section: 'Master Setup', icon: 'settings', path: '/settings', empPath: '/settings' },
@@ -333,8 +335,9 @@ export class ShellComponent implements OnInit, OnDestroy {
     return result;
   });
 
-  protected readonly notifications = signal<AppNotification[]>(notificationsFor(this.role()));
-  protected readonly unreadCount = computed(() => this.notifications().filter((n) => n.unread).length);
+  protected readonly notifState = inject(NotificationStateService);
+  protected readonly notifications = computed(() => this.notifState.notifications());
+  protected readonly unreadCount = computed(() => this.notifState.unreadCount());
 
   protected readonly homePath = computed(() => (this.role() === 'Employee' ? '/me/profile' : '/employee-profile'));
 
@@ -377,23 +380,6 @@ export class ShellComponent implements OnInit, OnDestroy {
         error: () => {},
       });
     }
-
-    this.api.notifications().subscribe({
-      next: (items) =>
-        this.notifications.set(
-          items.map((n) => ({
-            id: n.id,
-            icon: ICONS[(n.iconKey as IconName) in ICONS ? (n.iconKey as IconName) : 'bell'],
-            title: n.title,
-            message: n.message,
-            time: n.timeLabel,
-            unread: !n.isRead,
-          })),
-        ),
-      error: () => {
-        /* API offline — keep the bundled notification feed. */
-      },
-    });
   }
 
   private refetchBranding(): void {
@@ -447,19 +433,29 @@ export class ShellComponent implements OnInit, OnDestroy {
     });
   }
 
-  protected markRead(notification: AppNotification): void {
-    if (!notification.unread) return;
-
-    notification.unread = false;
-    this.notifications.update((list) => [...list]);
-
-    if (notification.id) {
-      this.api.markNotificationRead(notification.id).subscribe({
-        error: () => {
-          /* best effort */
-        },
-      });
+  protected markRead(notification: any): void {
+    if (notification.unread && notification.id) {
+      this.notifState.markRead(notification.id);
     }
+
+    this.ui.closePanel();
+    const isEmp = this.role() === 'Employee';
+    if (notification.actionUrl) {
+      this.router.navigate([notification.actionUrl]);
+    } else {
+      const t = (notification.title || '').toLowerCase();
+      if (t.includes('birthday')) {
+        this.toast.show(`Celebration wish sent for ${notification.title}! 🎂`, 'success');
+      } else {
+        this.router.navigate([isEmp ? '/me/notifications' : '/notifications']);
+      }
+    }
+  }
+
+  protected viewAllNotifications(): void {
+    this.ui.closePanel();
+    const target = this.role() === 'Employee' ? '/me/notifications' : '/notifications';
+    this.router.navigate([target]);
   }
 
   ngOnDestroy(): void {

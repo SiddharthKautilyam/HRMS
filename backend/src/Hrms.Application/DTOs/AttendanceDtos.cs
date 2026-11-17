@@ -86,7 +86,10 @@ public sealed record AttendancePersonDto(
     string Department,
     string? Designation,
     string? CheckInTime,
-    string? LeaveReason);
+    string? LeaveReason,
+    string? CheckOutTime = null,
+    decimal WorkHours = 0,
+    string? Status = null);
 
 public sealed record TodayAttendanceOverviewDto(
     int TotalEmployees,

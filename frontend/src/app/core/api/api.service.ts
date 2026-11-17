@@ -533,12 +533,40 @@ export class ApiService {
     return this.http.get<Announcement[]>(this.url('/announcements'));
   }
 
+  createAnnouncement(payload: { title: string; message: string; tag: string; severity: string }): Observable<Announcement> {
+    return this.http.post<Announcement>(this.url('/announcements'), payload);
+  }
+
+  updateAnnouncement(id: string, payload: { title: string; message: string; tag: string; severity: string }): Observable<Announcement> {
+    return this.http.put<Announcement>(this.url(`/announcements/${id}`), payload);
+  }
+
+  deleteAnnouncement(id: string): Observable<void> {
+    return this.http.delete<void>(this.url(`/announcements/${id}`));
+  }
+
   notifications(): Observable<NotificationItem[]> {
     return this.http.get<NotificationItem[]>(this.url('/notifications'));
   }
 
   markNotificationRead(id: string): Observable<void> {
     return this.http.post<void>(this.url(`/notifications/${id}/read`), {});
+  }
+
+  markAllNotificationsRead(): Observable<void> {
+    return this.http.post<void>(this.url('/notifications/mark-all-read'), {});
+  }
+
+  clearAllNotifications(): Observable<void> {
+    return this.http.post<void>(this.url('/notifications/clear-all'), {});
+  }
+
+  deleteNotification(id: string): Observable<void> {
+    return this.http.delete<void>(this.url(`/notifications/${id}`));
+  }
+
+  toggleNotificationRead(id: string): Observable<void> {
+    return this.http.post<void>(this.url(`/notifications/${id}/toggle`), {});
   }
 
   // ── Dashboard ──
@@ -648,8 +676,10 @@ export class ApiService {
     return this.http.get<EmployeePunch[]>(this.url('/attendance/punches/today'), { params: toParams({ employeeId }) });
   }
 
-  todayAttendanceOverview(): Observable<TodayAttendanceOverview> {
-    return this.http.get<TodayAttendanceOverview>(this.url('/attendance/overview/today'));
+  todayAttendanceOverview(date?: string): Observable<TodayAttendanceOverview> {
+    return this.http.get<TodayAttendanceOverview>(this.url('/attendance/overview/today'), {
+      params: toParams({ date }),
+    });
   }
 
   enrolledFaces(token?: string): Observable<EnrolledFace[]> {

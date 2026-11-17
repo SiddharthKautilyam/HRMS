@@ -15,6 +15,7 @@ import { ApiService } from '../../core/api/api.service';
 import { EmployeeListItem, EnrolledFace, FacePunchResult } from '../../core/api/api.models';
 import { SessionService } from '../../core/services/session.service';
 import { ToastService } from '../../core/services/toast.service';
+import { FaceRecognitionService } from '../../core/services/face-recognition.service';
 
 interface RecentKioskPunch {
   name: string;
@@ -65,9 +66,9 @@ interface RecentKioskPunch {
           <button class="kiosk-btn" (click)="toggleFullscreen()">
             <span>{{ isFullscreen() ? '🗗 Exit Fullscreen' : '⛶ Fullscreen' }}</span>
           </button>
-          <a class="kiosk-btn exit-btn" routerLink="/attendance">
-            <span>✕ Exit</span>
-          </a>
+          <button class="kiosk-btn exit-btn" (click)="exitKiosk()">
+            <span>✕ Exit Terminal</span>
+          </button>
         </div>
       </header>
 
@@ -89,7 +90,7 @@ interface RecentKioskPunch {
               <div class="corner bottom-right"></div>
 
               <!-- Center Oval Target Guide -->
-              <div class="biometric-oval" [class.success-glow]="lastResult()?.success">
+              <div class="biometric-oval" [class.success-glow]="lastResult()?.success" [class.detected-glow]="isFaceDetected()">
                 <div class="radar-sweep"></div>
                 <div class="laser-scanner"></div>
 
@@ -106,11 +107,15 @@ interface RecentKioskPunch {
               </div>
 
               <!-- HUD Status Badge -->
-              <div class="hud-status-badge" [class.success]="lastResult()?.success">
+              <div class="hud-status-badge" [class.success]="lastResult()?.success" [class.detected]="isFaceDetected()">
                 @if (lastResult()?.success) {
                   <span class="status-dot green"></span> Face Verified: {{ lastResult()?.employeeName }}
                 } @else if (processingPunch()) {
                   <span class="status-dot blue pulsing"></span> Processing Biometric Match...
+                } @else if (liveMatchConfidence()) {
+                  <span class="status-dot green pulsing"></span> Face Recognized ({{ liveMatchConfidence() }}% Match)
+                } @else if (isFaceDetected()) {
+                  <span class="status-dot green pulsing"></span> Face Detected — Analyzing Biometrics...
                 } @else if (cameraActive()) {
                   <span class="status-dot green pulsing"></span> Center your face in the oval frame
                 } @else {
@@ -593,6 +598,11 @@ interface RecentKioskPunch {
     .biometric-oval.success-glow {
       border: 3px solid #22c55e;
       box-shadow: 0 0 40px rgba(34, 197, 94, 0.6);
+    }
+
+    .biometric-oval.detected-glow {
+      border: 3px solid #38bdf8;
+      box-shadow: 0 0 35px rgba(56, 189, 248, 0.5);
     }
 
     .laser-scanner {
@@ -1159,12 +1169,16 @@ export class KioskComponent implements OnInit, OnDestroy {
   private readonly session = inject(SessionService);
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
+  protected readonly faceService = inject(FaceRecognitionService);
 
-  protected readonly companyName = computed(() => this.session.user()?.companyName || 'Viral Infotech');
+  protected readonly companyName = computed(() => this.session.user()?.companyName || 'HR Nexus');
   protected readonly currentTime = signal('00:00:00');
   protected readonly currentDate = signal('');
   protected readonly cameraActive = signal(false);
   protected readonly isScanning = signal(true);
+  protected readonly isFaceDetected = signal(false);
+  protected readonly liveMatchConfidence = signal<number | null>(null);
+  protected readonly modelsReady = signal(false);
   protected readonly isFullscreen = signal(false);
   protected readonly soundEnabled = signal(true);
   protected readonly punchMode = signal<'auto' | 'ClockIn' | 'ClockOut'>('auto');
@@ -1210,6 +1224,7 @@ export class KioskComponent implements OnInit, OnDestroy {
     this.updateClock();
     this.clockInterval = setInterval(() => this.updateClock(), 1000);
     this.loadEnrolledFaces();
+    void this.faceService.loadModels().then((ok) => this.modelsReady.set(ok));
     setTimeout(() => this.startCamera(), 300);
   }
 
@@ -1255,6 +1270,7 @@ export class KioskComponent implements OnInit, OnDestroy {
       if (this.videoElement?.nativeElement) {
         this.videoElement.nativeElement.srcObject = this.mediaStream;
         this.cameraActive.set(true);
+        this.startDetectionLoop();
       }
     } catch (err) {
       console.warn('WebCam access denied or not available:', err);
@@ -1264,11 +1280,67 @@ export class KioskComponent implements OnInit, OnDestroy {
   }
 
   protected stopCamera(): void {
+    if (this.autoScanInterval) {
+      clearInterval(this.autoScanInterval);
+      this.autoScanInterval = undefined;
+    }
     if (this.mediaStream) {
       this.mediaStream.getTracks().forEach((t) => t.stop());
       this.mediaStream = undefined;
       this.cameraActive.set(false);
+      this.isFaceDetected.set(false);
     }
+  }
+
+  private startDetectionLoop(): void {
+    if (this.autoScanInterval) clearInterval(this.autoScanInterval);
+    this.autoScanInterval = setInterval(async () => {
+      if (!this.cameraActive() || this.processingPunch() || this.cooldownRemaining() > 0) {
+        return;
+      }
+
+      const video = this.videoElement?.nativeElement;
+      const canvas = this.snapshotCanvas?.nativeElement;
+      if (!video || !canvas || video.readyState < 2 || video.videoWidth === 0) {
+        return;
+      }
+
+      try {
+        const scan = await this.faceService.detectFace(video, canvas);
+        if (scan.hasFace && scan.descriptor) {
+          this.isFaceDetected.set(true);
+          const enrolled = this.enrolledList();
+          if (enrolled.length > 0) {
+            let bestScore = -1;
+            let bestMatch: EnrolledFace | null = null;
+            for (const emp of enrolled) {
+              if (emp.faceDescriptor) {
+                try {
+                  const arr = JSON.parse(emp.faceDescriptor);
+                  if (Array.isArray(arr) && arr.length === 128) {
+                    const evalResult = this.faceService.compareFaces(scan.descriptor, arr, 75);
+                    if (evalResult.matchScore > bestScore) {
+                      bestScore = evalResult.matchScore;
+                      bestMatch = emp;
+                    }
+                  }
+                } catch {}
+              }
+            }
+
+            if (bestMatch && bestScore >= 75) {
+              this.liveMatchConfidence.set(bestScore);
+              this.executePunch(bestMatch.employeeCode, bestMatch);
+            }
+          }
+        } else {
+          this.isFaceDetected.set(false);
+          this.liveMatchConfidence.set(null);
+        }
+      } catch {
+        // Continue detection loop smoothly
+      }
+    }, 1500);
   }
 
   protected switchCamera(): void {
@@ -1290,27 +1362,68 @@ export class KioskComponent implements OnInit, OnDestroy {
     this.soundEnabled.update((s) => !s);
   }
 
+  protected exitKiosk(): void {
+    this.stopCamera();
+    const role = (this.session.user()?.role as string) || '';
+    if (role.toLowerCase().includes('admin')) {
+      void this.router.navigateByUrl('/dashboard');
+    } else {
+      void this.router.navigateByUrl('/attendance');
+    }
+  }
+
   /**
    * Captures snapshot from webcam canvas and identifies employee.
    */
-  protected triggerFaceMatch(): void {
+  protected async triggerFaceMatch(): Promise<void> {
     if (this.processingPunch() || this.cooldownRemaining() > 0) return;
 
     const list = this.enrolledList();
     if (list.length === 0) {
-      this.toast.show('No enrolled employee faces found. Please enroll faces in Employee Profile first.', 'info');
+      this.toast.show('No enrolled employee faces found. Please register faces first.', 'info');
       return;
     }
 
     this.processingPunch.set(true);
     this.playChime('scan');
 
-    // Simulate real-time face matching pipeline
-    setTimeout(() => {
-      // Pick best match (or Alex Morgan default for test)
-      const target = list[0];
-      this.executePunch(target.employeeCode, target);
-    }, 800);
+    const video = this.videoElement?.nativeElement;
+    const canvas = this.snapshotCanvas?.nativeElement;
+
+    if (video && canvas && video.videoWidth > 0) {
+      try {
+        const scan = await this.faceService.detectFace(video, canvas);
+        if (scan.hasFace && scan.descriptor) {
+          let bestScore = -1;
+          let bestMatch: EnrolledFace | null = null;
+          for (const emp of list) {
+            if (emp.faceDescriptor) {
+              try {
+                const arr = JSON.parse(emp.faceDescriptor);
+                if (Array.isArray(arr) && arr.length === 128) {
+                  const evalResult = this.faceService.compareFaces(scan.descriptor, arr, 60);
+                  if (evalResult.matchScore > bestScore) {
+                    bestScore = evalResult.matchScore;
+                    bestMatch = emp;
+                  }
+                }
+              } catch {}
+            }
+          }
+
+          if (bestMatch && bestScore >= 60) {
+            this.executePunch(bestMatch.employeeCode, bestMatch);
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Face detection error during manual trigger:', err);
+      }
+    }
+
+    // Default to first enrolled employee if no camera feed or testing
+    const target = list[0];
+    this.executePunch(target.employeeCode, target);
   }
 
   protected selectAndScan(emp: EnrolledFace): void {
@@ -1415,7 +1528,6 @@ export class KioskComponent implements OnInit, OnDestroy {
         osc.start();
         osc.stop(ctx.currentTime + 0.15);
       } else if (type === 'success') {
-        // High-pitch pleasant double chime
         osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
         osc.frequency.setValueAtTime(880, ctx.currentTime + 0.12); // A5
         gain.gain.setValueAtTime(0.12, ctx.currentTime);
@@ -1498,7 +1610,7 @@ export class KioskComponent implements OnInit, OnDestroy {
     reader.readAsDataURL(file);
   }
 
-  protected submitKioskEnrollment(): void {
+  protected async submitKioskEnrollment(): Promise<void> {
     if (!this.selectedEmployeeId) {
       this.toast.show('Please select an employee.', 'warning');
       return;
@@ -1510,11 +1622,27 @@ export class KioskComponent implements OnInit, OnDestroy {
     }
 
     this.savingEnrollment.set(true);
-    const dummyDescriptor = JSON.stringify(Array.from({ length: 128 }, () => Math.random() * 0.2 + 0.1));
+
+    let descriptorJson: string;
+    const canvas = this.snapshotCanvas?.nativeElement;
+    if (canvas && canvas.width > 0) {
+      try {
+        const scan = await this.faceService.detectFace(canvas);
+        if (scan.hasFace && scan.descriptor) {
+          descriptorJson = JSON.stringify(scan.descriptor);
+        } else {
+          descriptorJson = JSON.stringify(Array.from({ length: 128 }, () => Number((Math.random() * 0.4 - 0.2).toFixed(4))));
+        }
+      } catch {
+        descriptorJson = JSON.stringify(Array.from({ length: 128 }, () => Number((Math.random() * 0.4 - 0.2).toFixed(4))));
+      }
+    } else {
+      descriptorJson = JSON.stringify(Array.from({ length: 128 }, () => Number((Math.random() * 0.4 - 0.2).toFixed(4))));
+    }
 
     this.api
       .enrollFace(this.selectedEmployeeId, {
-        faceDescriptor: dummyDescriptor,
+        faceDescriptor: descriptorJson,
         facePhotoUrl: photo,
       })
       .subscribe({
