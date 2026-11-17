@@ -14,6 +14,9 @@ using Hrms.Infrastructure;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 
+// Ensure wwwroot exists before WebApplication.CreateBuilder initializes StaticWebAssets
+Directory.CreateDirectory(Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads"));
+
 var builder = WebApplication.CreateBuilder(args);
 
 // ── Controllers / JSON ──

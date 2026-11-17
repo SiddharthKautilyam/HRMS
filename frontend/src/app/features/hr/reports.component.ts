@@ -52,7 +52,14 @@ interface OtReport {
         <div class="page-title">Reports</div>
         <div class="page-subtitle">Analytics and data exports</div>
       </div>
-      <button class="btn btn-primary btn-sm" (click)="toast.show('Exporting report...')"><span [appIcon]="'download'"></span> Export All</button>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn btn-outline btn-sm" (click)="exportActiveTab()" [title]="'Export ' + activeTabLabel() + ' to Excel'">
+          <span [appIcon]="'download'"></span> Export {{ activeTabLabel() }}
+        </button>
+        <button class="btn btn-primary btn-sm" (click)="exportAllToExcel()" title="Export all reports (Payroll, Attendance, Leave, Overtime) to an Excel workbook">
+          <span [appIcon]="'download'"></span> Export All
+        </button>
+      </div>
     </div>
 
     <div style="margin-bottom: 20px">
@@ -68,9 +75,8 @@ interface OtReport {
         <div class="card">
           <div class="card-header">
             <div class="card-title">Payroll Summary Report</div>
-            <div style="display: flex; gap: 8px">
-              <app-select [options]="yearOptions" [value]="year()" (valueChange)="year.set($event)" width="150px" />
-              <button class="btn btn-outline btn-sm" (click)="toast.show('Downloading...')"><span [appIcon]="'download'"></span> Download</button>
+            <div>
+              <app-select [options]="yearOptions()" [value]="year()" (valueChange)="year.set($event)" width="150px" />
             </div>
           </div>
           <div class="table-wrap">
@@ -87,7 +93,7 @@ interface OtReport {
                 </tr>
               </thead>
               <tbody>
-                @for (r of payrollRows(); track r.m) {
+                @for (r of filteredPayrollRows(); track r.m) {
                   <tr>
                     <td style="font-weight: 700">{{ r.m }}</td>
                     <td>{{ r.emp }}</td>
@@ -96,6 +102,12 @@ interface OtReport {
                     <td class="rpt-col-hide" style="color: var(--text)">{{ r.ded }}</td>
                     <td style="font-weight: 800; color: var(--p)">{{ r.net }}</td>
                     <td><span class="badge badge-success">{{ r.status }}</span></td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="7" style="text-align: center; padding: 24px; color: var(--muted);">
+                      No payroll records found for {{ year() === 'all' ? 'any period' : year() }}.
+                    </td>
                   </tr>
                 }
               </tbody>
@@ -108,7 +120,6 @@ interface OtReport {
         <div class="card">
           <div class="card-header">
             <div class="card-title">Attendance Report · {{ reportPeriod() }}</div>
-            <button class="btn btn-outline btn-sm" (click)="toast.show('Downloading...')"><span [appIcon]="'download'"></span> Download</button>
           </div>
           <div class="table-wrap">
             <table>
@@ -134,6 +145,12 @@ interface OtReport {
                     <td class="rpt-col-hide" style="font-weight: 600">{{ r.avg }}</td>
                     <td><span class="badge" [class]="ratingClass(r.rating)">{{ r.rating }}</span></td>
                   </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="7" style="text-align: center; padding: 24px; color: var(--muted);">
+                      No attendance records found.
+                    </td>
+                  </tr>
                 }
               </tbody>
             </table>
@@ -144,8 +161,7 @@ interface OtReport {
       @if (tab() === 'leave') {
         <div class="card">
           <div class="card-header">
-            <div class="card-title">Leave Report · 2025</div>
-            <button class="btn btn-outline btn-sm" (click)="toast.show('Downloading...')"><span [appIcon]="'download'"></span> Download</button>
+            <div class="card-title">Leave Report · {{ reportPeriod() }}</div>
           </div>
           <div class="table-wrap">
             <table>
@@ -169,6 +185,12 @@ interface OtReport {
                     <td class="rpt-col-hide">{{ r.unpaid }}</td>
                     <td style="font-weight: 700; color: var(--p)">{{ r.balance }}</td>
                   </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="6" style="text-align: center; padding: 24px; color: var(--muted);">
+                      No leave records found.
+                    </td>
+                  </tr>
                 }
               </tbody>
             </table>
@@ -180,7 +202,6 @@ interface OtReport {
         <div class="card">
           <div class="card-header">
             <div class="card-title">Overtime Report · {{ reportPeriod() }}</div>
-            <button class="btn btn-outline btn-sm" (click)="toast.show('Downloading...')"><span [appIcon]="'download'"></span> Download</button>
           </div>
           <div class="table-wrap">
             <table>
@@ -201,6 +222,12 @@ interface OtReport {
                     <td class="rpt-col-hide">{{ r.rate }}</td>
                     <td style="font-weight: 700; color: var(--p)">{{ r.amount }}</td>
                     <td><span class="badge" [class]="r.status === 'Approved' ? 'badge-success' : 'badge-warning'">{{ r.status }}</span></td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="5" style="text-align: center; padding: 24px; color: var(--muted);">
+                      No overtime records found.
+                    </td>
                   </tr>
                 }
               </tbody>
@@ -237,15 +264,49 @@ export class ReportsComponent implements OnInit {
 
   protected readonly tab = signal<'payroll' | 'attendance' | 'leave' | 'overtime'>('payroll');
 
-  protected readonly yearOptions: SelectOption[] = [
-    { v: '2025', l: '2025' },
-    { v: '2024', l: '2024' },
-  ];
-  protected readonly year = signal('2025');
+  protected readonly activeTabLabel = computed(() => {
+    const current = this.tabs.find((t) => t.id === this.tab());
+    return current ? current.label : 'Report';
+  });
 
-  protected readonly reportPeriod = computed(() => this.year() || 'All Time');
+  protected readonly year = signal('2026');
 
   protected readonly payrollRows = signal<PayrollReport[]>([]);
+
+  protected readonly yearOptions = computed<SelectOption[]>(() => {
+    const yearSet = new Set<string>();
+    const curYear = new Date().getFullYear();
+    yearSet.add(curYear.toString());
+    yearSet.add((curYear - 1).toString());
+    yearSet.add((curYear - 2).toString());
+
+    for (const r of this.payrollRows()) {
+      const match = r.m.match(/\b(20\d{2})\b/);
+      if (match) {
+        yearSet.add(match[1]);
+      }
+    }
+
+    const sorted = Array.from(yearSet).sort((a, b) => b.localeCompare(a));
+    return [
+      { v: 'all', l: 'All Years' },
+      ...sorted.map((y) => ({ v: y, l: y })),
+    ];
+  });
+
+  protected readonly filteredPayrollRows = computed(() => {
+    const selectedYear = this.year();
+    const rows = this.payrollRows();
+    if (!selectedYear || selectedYear === 'all') {
+      return rows;
+    }
+    return rows.filter((r) => r.m.includes(selectedYear));
+  });
+
+  protected readonly reportPeriod = computed(() => {
+    const y = this.year();
+    return !y || y === 'all' ? 'All Time' : y;
+  });
 
   protected readonly attendRows = signal<AttendReport[]>([]);
 
@@ -255,7 +316,7 @@ export class ReportsComponent implements OnInit {
 
   ngOnInit(): void {
     this.api.reportsPayroll().subscribe({
-      next: (rows) =>
+      next: (rows) => {
         this.payrollRows.set(
           rows.map((r) => ({
             m: r.month,
@@ -266,7 +327,15 @@ export class ReportsComponent implements OnInit {
             net: this.money(r.net),
             status: r.status,
           })),
-        ),
+        );
+        // If there are records and current year isn't matching any, default to the year of the latest record
+        if (rows.length > 0) {
+          const match = rows[0].month.match(/\b(20\d{2})\b/);
+          if (match && this.year() !== match[1] && !rows.some((r) => r.month.includes(this.year()))) {
+            this.year.set(match[1]);
+          }
+        }
+      },
       error: () => {
         /* API offline — keep demo report rows. */
       },
@@ -322,6 +391,198 @@ export class ReportsComponent implements OnInit {
         /* API offline — keep demo report rows. */
       },
     });
+  }
+
+  protected exportActiveTab(): void {
+    const current = this.tab();
+    const period = this.reportPeriod();
+
+    if (current === 'payroll') {
+      const rows = this.filteredPayrollRows();
+      if (rows.length === 0) {
+        this.toast.show('No payroll records to export for this period', 'warning');
+        return;
+      }
+      this.downloadExcelWorkbook(
+        [
+          {
+            name: 'Payroll Summary',
+            headers: ['Month', 'Employees', 'Gross', 'Allowances', 'Deductions', 'Net', 'Status'],
+            rows: rows.map((r) => [r.m, r.emp, r.gross, r.allow, r.ded, r.net, r.status]),
+          },
+        ],
+        `HRMS_Payroll_Report_${period}`
+      );
+    } else if (current === 'attendance') {
+      const rows = this.attendRows();
+      if (rows.length === 0) {
+        this.toast.show('No attendance records to export', 'warning');
+        return;
+      }
+      this.downloadExcelWorkbook(
+        [
+          {
+            name: 'Attendance Report',
+            headers: ['Employee', 'Department', 'Present', 'Absent', 'Late', 'Avg Hours', 'Rating'],
+            rows: rows.map((r) => [r.n, r.dept, r.present, r.absent, r.late, r.avg, r.rating]),
+          },
+        ],
+        `HRMS_Attendance_Report_${period}`
+      );
+    } else if (current === 'leave') {
+      const rows = this.leaveRows();
+      if (rows.length === 0) {
+        this.toast.show('No leave records to export', 'warning');
+        return;
+      }
+      this.downloadExcelWorkbook(
+        [
+          {
+            name: 'Leave Report',
+            headers: ['Employee', 'Annual Used', 'Sick Used', 'Emergency Used', 'Unpaid Used', 'Balance'],
+            rows: rows.map((r) => [r.n, r.annual, r.sick, r.emergency, r.unpaid, r.balance]),
+          },
+        ],
+        `HRMS_Leave_Report_${period}`
+      );
+    } else if (current === 'overtime') {
+      const rows = this.otRows();
+      if (rows.length === 0) {
+        this.toast.show('No overtime records to export', 'warning');
+        return;
+      }
+      this.downloadExcelWorkbook(
+        [
+          {
+            name: 'Overtime Report',
+            headers: ['Employee', 'OT Hours', 'OT Rate', 'OT Amount', 'Status'],
+            rows: rows.map((r) => [r.n, r.hours, r.rate, r.amount, r.status]),
+          },
+        ],
+        `HRMS_Overtime_Report_${period}`
+      );
+    }
+
+    this.toast.show(`${this.activeTabLabel()} exported to Excel successfully`, 'success');
+  }
+
+  protected exportAllToExcel(): void {
+    const period = this.reportPeriod();
+    const payrollData = this.filteredPayrollRows().length > 0 ? this.filteredPayrollRows() : this.payrollRows();
+
+    const sheets = [
+      {
+        name: 'Payroll Summary',
+        headers: ['Month', 'Employees', 'Gross', 'Allowances', 'Deductions', 'Net', 'Status'],
+        rows: payrollData.map((r) => [r.m, r.emp, r.gross, r.allow, r.ded, r.net, r.status]),
+      },
+      {
+        name: 'Attendance Report',
+        headers: ['Employee', 'Department', 'Present', 'Absent', 'Late', 'Avg Hours', 'Rating'],
+        rows: this.attendRows().map((r) => [r.n, r.dept, r.present, r.absent, r.late, r.avg, r.rating]),
+      },
+      {
+        name: 'Leave Report',
+        headers: ['Employee', 'Annual Used', 'Sick Used', 'Emergency Used', 'Unpaid Used', 'Balance'],
+        rows: this.leaveRows().map((r) => [r.n, r.annual, r.sick, r.emergency, r.unpaid, r.balance]),
+      },
+      {
+        name: 'Overtime Report',
+        headers: ['Employee', 'OT Hours', 'OT Rate', 'OT Amount', 'Status'],
+        rows: this.otRows().map((r) => [r.n, r.hours, r.rate, r.amount, r.status]),
+      },
+    ];
+
+    this.downloadExcelWorkbook(sheets, `HRMS_All_Reports_${period}`);
+    this.toast.show('All reports exported to Excel successfully', 'success');
+  }
+
+  private escapeXml(value: unknown): string {
+    if (value === null || value === undefined) return '';
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  }
+
+  private buildWorksheetXml(name: string, headers: string[], rows: (string | number)[][]): string {
+    const safeSheetName = this.escapeXml(name.replace(/[\[\]*?:/\\]/g, '').slice(0, 31));
+    let xml = `  <Worksheet ss:Name="${safeSheetName}">\n`;
+    xml += '    <Table>\n';
+
+    // Header Row
+    xml += '      <Row ss:Height="24">\n';
+    for (const h of headers) {
+      xml += `        <Cell ss:StyleID="HeaderStyle"><Data ss:Type="String">${this.escapeXml(h)}</Data></Cell>\n`;
+    }
+    xml += '      </Row>\n';
+
+    // Data Rows
+    for (const row of rows) {
+      xml += '      <Row ss:Height="20">\n';
+      for (const val of row) {
+        const isNum = typeof val === 'number';
+        const type = isNum ? 'Number' : 'String';
+        xml += `        <Cell ss:StyleID="DataStyle"><Data ss:Type="${type}">${this.escapeXml(val)}</Data></Cell>\n`;
+      }
+      xml += '      </Row>\n';
+    }
+
+    xml += '    </Table>\n';
+    xml += '  </Worksheet>\n';
+    return xml;
+  }
+
+  private downloadExcelWorkbook(
+    sheets: { name: string; headers: string[]; rows: (string | number)[][] }[],
+    baseFilename: string
+  ): void {
+    let xml = '<?xml version="1.0" encoding="utf-8"?>\n';
+    xml += '<?mso-application progid="Excel.Sheet"?>\n';
+    xml += '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"\n';
+    xml += ' xmlns:o="urn:schemas-microsoft-com:office:office"\n';
+    xml += ' xmlns:x="urn:schemas-microsoft-com:office:excel"\n';
+    xml += ' xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"\n';
+    xml += ' xmlns:html="http://www.w3.org/TR/REC-html40">\n';
+    xml += '  <Styles>\n';
+    xml += '    <Style ss:ID="Default" ss:Name="Normal">\n';
+    xml += '      <Alignment ss:Vertical="Center"/>\n';
+    xml += '      <Font ss:FontName="Calibri" ss:Size="11" ss:Color="#1E293B"/>\n';
+    xml += '    </Style>\n';
+    xml += '    <Style ss:ID="HeaderStyle">\n';
+    xml += '      <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>\n';
+    xml += '      <Borders>\n';
+    xml += '        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>\n';
+    xml += '      </Borders>\n';
+    xml += '      <Font ss:FontName="Calibri" ss:Size="11" ss:Color="#FFFFFF" ss:Bold="1"/>\n';
+    xml += '      <Interior ss:Color="#2563EB" ss:Pattern="Solid"/>\n';
+    xml += '    </Style>\n';
+    xml += '    <Style ss:ID="DataStyle">\n';
+    xml += '      <Alignment ss:Vertical="Center"/>\n';
+    xml += '      <Borders>\n';
+    xml += '        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#F1F5F9"/>\n';
+    xml += '      </Borders>\n';
+    xml += '      <Font ss:FontName="Calibri" ss:Size="10" ss:Color="#334155"/>\n';
+    xml += '    </Style>\n';
+    xml += '  </Styles>\n';
+
+    for (const sheet of sheets) {
+      xml += this.buildWorksheetXml(sheet.name, sheet.headers, sheet.rows);
+    }
+
+    xml += '</Workbook>';
+
+    const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${baseFilename}.xls`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   private money(value: number): string {
