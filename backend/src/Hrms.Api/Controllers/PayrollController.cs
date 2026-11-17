@@ -51,6 +51,37 @@ public sealed class PayrollController : ControllerBase
         return Ok(await _payroll.GetPayslipsForEmployeeAsync(id, ct));
     }
 
+    /// <summary>Downloads a payslip PDF for an individual payslip ID.</summary>
+    [HttpGet("payslips/{id:guid}/download")]
+    [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
+    public async Task<IActionResult> DownloadPayslip(Guid id, CancellationToken ct)
+    {
+        var (content, fileName) = await _payroll.DownloadPayslipPdfAsync(payslipId: id, ct: ct);
+        return File(content, "application/pdf", fileName);
+    }
+
+    /// <summary>Downloads a payslip PDF by employee (code or GUID) and pay period.</summary>
+    [HttpGet("download-slip")]
+    [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
+    public async Task<IActionResult> DownloadSlip(
+        [FromQuery] Guid? payslipId,
+        [FromQuery] Guid? employeeId,
+        [FromQuery] string? employeeCode,
+        [FromQuery] int? month,
+        [FromQuery] int? year,
+        CancellationToken ct)
+    {
+        var (content, fileName) = await _payroll.DownloadPayslipPdfAsync(
+            payslipId: payslipId,
+            employeeId: employeeId,
+            employeeCode: employeeCode,
+            month: month,
+            year: year,
+            ct: ct);
+
+        return File(content, "application/pdf", fileName);
+    }
+
     /// <summary>Processes payroll for a month. Fails with 409 if that period already exists.</summary>
     [HttpPost("run")]
     [Authorize(Policy = "HrAdmin")]
