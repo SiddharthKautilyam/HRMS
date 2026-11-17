@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { ApiService } from '../../core/api/api.service';
 import { IconDirective } from '../../core/icons/icon.directive';
 import { ToastService } from '../../core/services/toast.service';
@@ -7,6 +8,7 @@ import { UiService } from '../../core/services/ui.service';
 import { SelectComponent, SelectOption } from '../../shared/select.component';
 
 interface DocumentRow {
+  id?: string;
   n: string;
   doc: string;
   t: string;
@@ -14,6 +16,8 @@ interface DocumentRow {
   exp: string;
   days: number;
   s: 'Critical' | 'Warning' | 'Valid' | 'Expired';
+  fileUrl?: string | null;
+  fileSize?: string | null;
 }
 
 /** Document Management — ported from pages/documents.html. */
@@ -38,23 +42,6 @@ interface DocumentRow {
         </div>
       }
     </div>
-
-    @if (expiringCount() > 0) {
-      <div class="alert alert-warning" style="margin-bottom: 16px">
-        <span [appIcon]="'alert'"></span>
-        <span>
-          <strong>{{ expiringCount() }} document{{ expiringCount() === 1 ? '' : 's' }}</strong>
-          {{ expiringCount() === 1 ? 'is' : 'are' }} expiring within 7 days.
-          <button
-            type="button"
-            style="color: var(--warning); font-weight: 700; background: none; border: none; cursor: pointer; text-decoration: underline; padding: 0 4px"
-            (click)="filterExpiring()"
-          >
-            View all →
-          </button>
-        </span>
-      </div>
-    }
 
     <div class="card">
       <div class="card-header">
@@ -92,13 +79,12 @@ interface DocumentRow {
                 <td><span class="badge badge-info">{{ r.t }}</span></td>
                 <td style="color: var(--muted)">{{ r.iss }}</td>
                 <td>{{ r.exp }}</td>
-                <td><span style="font-weight: 700; color: var(--text)">{{ r.days }}d</span></td>
+                <td><span style="font-weight: 700; color: var(--text)">{{ formatDaysLeft(r.days, r.exp) }}</span></td>
                 <td><span class="badge" [class]="docClass(r.s)">{{ r.s }}</span></td>
                 <td>
                   <div style="display: flex; gap: 4px">
                     <button class="btn btn-ghost btn-sm" data-tooltip="View" (click)="view(r)"><span [appIcon]="'eye'"></span></button>
-                    <button class="btn btn-ghost btn-sm" data-tooltip="Download" (click)="toast.show('Downloading...')"><span [appIcon]="'download'"></span></button>
-                    <button class="btn btn-ghost btn-sm" data-tooltip="Send Reminder" (click)="toast.show('Reminder sent!')"><span [appIcon]="'bell'"></span></button>
+                    <button class="btn btn-ghost btn-sm" data-tooltip="Download" (click)="downloadDocument(r)"><span [appIcon]="'download'"></span></button>
                   </div>
                 </td>
               </tr>
@@ -116,35 +102,68 @@ interface DocumentRow {
 
     <!-- Doc View Modal -->
     <div class="modal-overlay" [class.open]="ui.isOpen('docViewModal')" (click)="ui.onOverlayClick($event, 'docViewModal')">
-      <div class="modal" style="max-width: 600px">
+      <div class="modal" style="max-width: 650px; max-height: 90vh; display: flex; flex-direction: column;">
         <div class="modal-header">
           <div>
-            <div class="card-title" style="font-size: 14px">{{ viewTarget()?.doc }} — Details</div>
+            <div class="card-title" style="font-size: 15px; font-weight: 700;">{{ viewTarget()?.doc }} — Details</div>
             <div class="card-subtitle">{{ viewTarget()?.n }} · {{ viewTarget()?.t }}</div>
           </div>
           <button class="btn btn-ghost btn-sm" (click)="ui.close('docViewModal')"><span [appIcon]="'x'"></span></button>
         </div>
-        <div class="modal-body">
+        <div class="modal-body" style="overflow-y: auto; max-height: calc(90vh - 130px);">
           @if (viewTarget(); as r) {
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px">
               @for (f of viewFields(r); track f[0]) {
                 <div style="background: var(--bg); border-radius: 8px; padding: 10px">
-                  <div style="font-size: 13px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px">
+                  <div style="font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px">
                     {{ f[0] }}
                   </div>
-                  <div style="font-size: 13px; font-weight: 400; color: var(--text)">{{ f[1] }}</div>
+                  <div style="font-size: 13px; font-weight: 600; color: var(--text)">{{ f[1] }}</div>
                 </div>
               }
             </div>
-            <div style="margin-top: 12px; display: flex; align-items: center; justify-content: space-between; padding: 12px; background: var(--bg); border-radius: 8px">
+            <div style="margin-top: 10px; display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: var(--bg); border-radius: 8px">
               <span style="font-size: 12px; font-weight: 700">Status</span>
               <span class="badge" [class]="docClass(r.s)">{{ r.s }}</span>
+            </div>
+
+            <!-- Uploaded Document Preview Area -->
+            <div style="margin-top: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 14px; background: var(--surface);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <span style="font-size: 12px; font-weight: 700; color: var(--text); text-transform: uppercase; letter-spacing: 0.04em;">
+                  Document File Preview
+                </span>
+                <a [href]="resolveFileUrl(r)" target="_blank" class="btn btn-ghost btn-sm" style="font-size: 11px; display: inline-flex; align-items: center; gap: 4px;">
+                  Open Original ↗
+                </a>
+              </div>
+
+              @if (isImage(r)) {
+                <div style="text-align: center; background: var(--bg); border-radius: 6px; padding: 12px; min-height: 200px; display: flex; align-items: center; justify-content: center;">
+                  <img 
+                    [src]="resolveFileUrl(r)" 
+                    [alt]="r.doc" 
+                    style="max-height: 320px; max-width: 100%; object-fit: contain; border-radius: 6px; box-shadow: 0 2px 10px rgba(0,0,0,0.08);"
+                    (error)="onImgError($event, r)"
+                  />
+                </div>
+              } @else if (isPdf(r)) {
+                <div style="background: var(--bg); border-radius: 6px; overflow: hidden; height: 350px;">
+                  <iframe [src]="safePdfUrl(r)" style="width: 100%; height: 100%; border: none;"></iframe>
+                </div>
+              } @else {
+                <div style="text-align: center; background: var(--bg); border-radius: 6px; padding: 24px;">
+                  <div style="color: var(--p); font-size: 32px; margin-bottom: 6px;"><span [appIcon]="'documents'"></span></div>
+                  <div style="font-weight: 700; font-size: 14px; color: var(--text);">{{ r.doc }}</div>
+                  <div style="font-size: 12px; color: var(--muted); margin-top: 4px;">{{ r.fileSize || 'Standard document' }} &bull; Ready to view and download</div>
+                </div>
+              }
             </div>
           }
         </div>
         <div class="modal-footer">
           <button class="btn btn-outline" (click)="ui.close('docViewModal')">Close</button>
-          <button class="btn btn-primary" style="display: flex; align-items: center; gap: 6px" (click)="toast.show('Downloading...')">
+          <button class="btn btn-primary" style="display: flex; align-items: center; gap: 6px" (click)="downloadDocument(viewTarget())">
             <span [appIcon]="'download'"></span> Download
           </button>
         </div>
@@ -242,6 +261,7 @@ export class DocumentsComponent implements OnInit {
   protected readonly ui = inject(UiService);
   protected readonly toast = inject(ToastService);
   private readonly api = inject(ApiService);
+  private readonly sanitizer = inject(DomSanitizer);
 
   protected readonly kpis = signal([
     { l: 'Total Documents', v: '0', c: 'var(--p)', bg: 'var(--p-soft)' },
@@ -254,7 +274,9 @@ export class DocumentsComponent implements OnInit {
     { v: '', l: 'All Types' },
     { v: 'Identity', l: 'Identity' },
     { v: 'Legal', l: 'Legal' },
+    { v: 'Employment', l: 'Employment' },
     { v: 'Benefits', l: 'Benefits' },
+    { v: 'Other', l: 'Company Policies' },
   ];
 
   protected readonly statusOptions: SelectOption[] = [
@@ -299,17 +321,6 @@ export class DocumentsComponent implements OnInit {
     );
   });
 
-  protected readonly expiringCount = computed(() => {
-    const kpi = this.kpis().find((k) => k.l === 'Expiring Soon');
-    const fromKpi = kpi ? parseInt(kpi.v, 10) : 0;
-    const fromRows = this.rows().filter((r) => r.s === 'Warning' || (r.days > 0 && r.days <= 7)).length;
-    return Math.max(isNaN(fromKpi) ? 0 : fromKpi, fromRows);
-  });
-
-  protected filterExpiring(): void {
-    this.status.set('Warning');
-  }
-
   protected onFileSelected(event: Event): void {
     const input = event.target as HTMLInputElement;
     if (input.files && input.files.length > 0) {
@@ -353,31 +364,70 @@ export class DocumentsComponent implements OnInit {
     const fileSize = file ? this.formatFileSize(file.size) : '1.2 MB';
 
     this.uploading.set(true);
-    this.api
-      .createDocument({
-        employeeId: empId || null,
-        name: docName,
-        type: documentType,
-        issueDate: this.uploadIssueDate() || new Date().toISOString().slice(0, 10),
-        expiryDate: this.uploadExpiryDate() || null,
-        notes: null,
-        fileUrl: file ? file.name : null,
-        fileSize,
-        isCompanyDocument: !empId,
-      })
-      .subscribe({
-        next: () => {
-          this.uploading.set(false);
-          this.closeUploadModal();
-          this.toast.show('Document uploaded successfully!', 'success');
-          this.loadDocuments();
-          this.loadSummary();
+
+    if (file) {
+      // 1. Physically upload the file to backend storage
+      this.api.uploadFile(file).subscribe({
+        next: (uploadRes) => {
+          // 2. Save metadata + permanent fileUrl in database
+          this.api
+            .createDocument({
+              employeeId: empId || null,
+              name: docName,
+              type: documentType,
+              issueDate: this.uploadIssueDate() || new Date().toISOString().slice(0, 10),
+              expiryDate: this.uploadExpiryDate() || null,
+              notes: null,
+              fileUrl: uploadRes.url,
+              fileSize: uploadRes.size || fileSize,
+              isCompanyDocument: !empId,
+            })
+            .subscribe({
+              next: () => {
+                this.uploading.set(false);
+                this.closeUploadModal();
+                this.toast.show('Document uploaded and saved successfully!', 'success');
+                this.loadDocuments();
+                this.loadSummary();
+              },
+              error: (err) => {
+                this.uploading.set(false);
+                this.toast.show(err?.error?.message || 'Could not save document record.', 'danger');
+              },
+            });
         },
         error: (err) => {
           this.uploading.set(false);
-          this.toast.show(err?.error?.message || 'Could not upload document.', 'danger');
+          this.toast.show(err?.error?.message || 'File upload failed.', 'danger');
         },
       });
+    } else {
+      this.api
+        .createDocument({
+          employeeId: empId || null,
+          name: docName,
+          type: documentType,
+          issueDate: this.uploadIssueDate() || new Date().toISOString().slice(0, 10),
+          expiryDate: this.uploadExpiryDate() || null,
+          notes: null,
+          fileUrl: null,
+          fileSize,
+          isCompanyDocument: !empId,
+        })
+        .subscribe({
+          next: () => {
+            this.uploading.set(false);
+            this.closeUploadModal();
+            this.toast.show('Document record created!', 'success');
+            this.loadDocuments();
+            this.loadSummary();
+          },
+          error: (err) => {
+            this.uploading.set(false);
+            this.toast.show(err?.error?.message || 'Could not create document.', 'danger');
+          },
+        });
+    }
   }
 
   ngOnInit(): void {
@@ -421,6 +471,7 @@ export class DocumentsComponent implements OnInit {
       next: (documents) =>
         this.rows.set(
           (documents || []).map((d) => ({
+            id: d.id,
             n: d.employeeName ?? 'Company',
             doc: d.name,
             t: d.type,
@@ -428,6 +479,8 @@ export class DocumentsComponent implements OnInit {
             exp: d.expiryDate ? this.formatDate(d.expiryDate) : ' · ',
             days: d.daysLeft ?? 0,
             s: d.status as DocumentRow['s'],
+            fileUrl: d.fileUrl,
+            fileSize: d.fileSize,
           })),
         ),
       error: () => {
@@ -454,6 +507,38 @@ export class DocumentsComponent implements OnInit {
     return `badge-${s === 'Critical' || s === 'Expired' ? 'danger' : s === 'Warning' ? 'warning' : 'success'}`;
   }
 
+  protected formatDaysLeft(days?: number | null, expiryDate?: string | null): string {
+    if (!expiryDate || expiryDate === ' · ' || expiryDate === '-' || expiryDate === 'NULL') {
+      return '—';
+    }
+    if (days === null || days === undefined) {
+      return '—';
+    }
+    if (days < 0) {
+      return `Expired (${Math.abs(days)}d)`;
+    }
+    if (days === 0) {
+      return 'Today';
+    }
+    if (days < 30) {
+      return `${days}d`;
+    }
+    if (days < 365) {
+      const months = Math.max(1, Math.round(days / 30.4));
+      return `${months} mo${months > 1 ? 's' : ''}`;
+    }
+    let years = Math.floor(days / 365);
+    let remMonths = Math.round((days % 365) / 30.4);
+    if (remMonths >= 12) {
+      years += 1;
+      remMonths = 0;
+    }
+    if (remMonths > 0) {
+      return `${years}y ${remMonths}m`;
+    }
+    return `${years} yr${years > 1 ? 's' : ''}`;
+  }
+
   protected viewFields(r: DocumentRow): [string, string][] {
     return [
       ['Employee', r.n],
@@ -461,12 +546,61 @@ export class DocumentsComponent implements OnInit {
       ['Type', r.t],
       ['Issue Date', r.iss],
       ['Expiry Date', r.exp],
-      ['Days Left', `${r.days}d`],
+      ['Days Left', this.formatDaysLeft(r.days, r.exp)],
     ];
   }
 
   protected view(r: DocumentRow): void {
     this.viewTarget.set(r);
     this.ui.open('docViewModal');
+  }
+
+  protected resolveFileUrl(r: DocumentRow): string {
+    const raw = (r.fileUrl || r.doc || '').trim();
+    if (!raw) return '';
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      return raw;
+    }
+    if (raw.startsWith('/api/') || raw.startsWith('/uploads/')) {
+      return raw;
+    }
+    return `/api/files/download/${encodeURIComponent(raw)}`;
+  }
+
+  protected isImage(r: DocumentRow): boolean {
+    const name = (r.doc || r.fileUrl || '').toLowerCase();
+    return name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.png') || name.endsWith('.svg') || name.endsWith('.webp') || name.endsWith('.gif');
+  }
+
+  protected isPdf(r: DocumentRow): boolean {
+    const name = (r.doc || r.fileUrl || '').toLowerCase();
+    return name.endsWith('.pdf');
+  }
+
+  protected safePdfUrl(r: DocumentRow): SafeResourceUrl {
+    return this.sanitizer.bypassSecurityTrustResourceUrl(this.resolveFileUrl(r));
+  }
+
+  protected onImgError(event: Event, r: DocumentRow): void {
+    const img = event.target as HTMLImageElement;
+    if (img && !img.dataset['triedFallback']) {
+      img.dataset['triedFallback'] = 'true';
+      img.src = `/api/files/download/${encodeURIComponent(r.doc)}`;
+    }
+  }
+
+  protected downloadDocument(r?: DocumentRow | null): void {
+    if (!r) return;
+    const url = this.resolveFileUrl(r);
+    const fileName = r.doc || 'document';
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    this.toast.show(`Downloading ${fileName}...`, 'info');
   }
 }
