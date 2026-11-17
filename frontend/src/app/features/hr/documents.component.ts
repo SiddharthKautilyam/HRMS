@@ -85,6 +85,7 @@ interface DocumentRow {
                   <div style="display: flex; gap: 4px">
                     <button class="btn btn-ghost btn-sm" data-tooltip="View" (click)="view(r)"><span [appIcon]="'eye'"></span></button>
                     <button class="btn btn-ghost btn-sm" data-tooltip="Download" (click)="downloadDocument(r)"><span [appIcon]="'download'"></span></button>
+                    <button class="btn btn-ghost btn-sm" data-tooltip="Remove" style="color: var(--danger)" (click)="removeDocument(r)"><span [appIcon]="'trash'"></span></button>
                   </div>
                 </td>
               </tr>
@@ -161,11 +162,16 @@ interface DocumentRow {
             </div>
           }
         </div>
-        <div class="modal-footer">
-          <button class="btn btn-outline" (click)="ui.close('docViewModal')">Close</button>
-          <button class="btn btn-primary" style="display: flex; align-items: center; gap: 6px" (click)="downloadDocument(viewTarget())">
-            <span [appIcon]="'download'"></span> Download
+        <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+          <button class="btn btn-outline" style="color: var(--danger); border-color: rgba(239, 68, 68, 0.3); display: flex; align-items: center; gap: 6px;" (click)="removeDocument(viewTarget())">
+            <span [appIcon]="'trash'"></span> Remove
           </button>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-outline" (click)="ui.close('docViewModal')">Close</button>
+            <button class="btn btn-primary" style="display: flex; align-items: center; gap: 6px" (click)="downloadDocument(viewTarget())">
+              <span [appIcon]="'download'"></span> Download
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -602,5 +608,34 @@ export class DocumentsComponent implements OnInit {
     a.click();
     document.body.removeChild(a);
     this.toast.show(`Downloading ${fileName}...`, 'info');
+  }
+
+  protected removeDocument(r?: DocumentRow | null): void {
+    if (!r) return;
+    const docName = r.doc || 'this document';
+    if (!confirm(`Are you sure you want to remove "${docName}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    if (r.id) {
+      this.api.deleteDocument(r.id).subscribe({
+        next: () => {
+          this.toast.show(`Document "${docName}" removed successfully.`, 'success');
+          this.ui.close('docViewModal');
+          this.viewTarget.set(null);
+          this.loadDocuments();
+          this.loadSummary();
+        },
+        error: (err) => {
+          this.toast.show(err?.error?.message || err?.error?.detail || 'Failed to remove document.', 'danger');
+        },
+      });
+    } else {
+      this.rows.update((list) => list.filter((x) => x !== r));
+      this.ui.close('docViewModal');
+      this.viewTarget.set(null);
+      this.toast.show(`Document "${docName}" removed.`, 'success');
+      this.loadSummary();
+    }
   }
 }

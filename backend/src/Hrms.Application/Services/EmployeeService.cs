@@ -1,3 +1,5 @@
+using System.Net;
+using Hrms.Application.Abstractions.Notifications;
 using Hrms.Application.Abstractions.Persistence;
 using Hrms.Application.Abstractions.Security;
 using Hrms.Application.Abstractions.Services;
@@ -5,6 +7,8 @@ using Hrms.Application.Common;
 using Hrms.Application.DTOs;
 using Hrms.Domain.Entities;
 using Hrms.Domain.Enums;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Hrms.Application.Services;
 
@@ -13,12 +17,24 @@ public sealed class EmployeeService : IEmployeeService
     private readonly IUnitOfWork _uow;
     private readonly ICurrentUser _currentUser;
     private readonly IPasswordHasher _passwordHasher;
+    private readonly IEmailSender _emailSender;
+    private readonly AppOptions _app;
+    private readonly ILogger<EmployeeService> _logger;
 
-    public EmployeeService(IUnitOfWork uow, ICurrentUser currentUser, IPasswordHasher passwordHasher)
+    public EmployeeService(
+        IUnitOfWork uow,
+        ICurrentUser currentUser,
+        IPasswordHasher passwordHasher,
+        IEmailSender emailSender,
+        IOptions<AppOptions> app,
+        ILogger<EmployeeService> logger)
     {
         _uow = uow;
         _currentUser = currentUser;
         _passwordHasher = passwordHasher;
+        _emailSender = emailSender;
+        _app = app.Value;
+        _logger = logger;
     }
 
     public async Task<PagedResult<EmployeeListItemDto>> SearchAsync(EmployeeQuery query, CancellationToken ct = default)
@@ -156,6 +172,40 @@ public sealed class EmployeeService : IEmployeeService
             }
 
             await _uow.SaveChangesAsync(ct);
+        }
+
+        // Send onboarding welcome email if configured (non-blocking)
+        try
+        {
+            var loginUrl = $"{_app.FrontendBaseUrl.TrimEnd('/')}/login";
+            var rawPassword = request.Password?.Trim();
+            var passwordDisplay = string.IsNullOrWhiteSpace(rawPassword) ? "(Configured during setup)" : WebUtility.HtmlEncode(rawPassword);
+            var body = $"""
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e5e7eb; border-radius: 8px; background-color: #ffffff;">
+                    <h2 style="color: #2563eb; margin-top: 0; margin-bottom: 16px;">Welcome to the Team, {WebUtility.HtmlEncode(request.FirstName)}! 👋</h2>
+                    <p style="color: #374151; font-size: 15px; line-height: 1.5;">Your HR portal employee account has been created successfully. Here are your onboarding access details:</p>
+                    <table style="width: 100%; border-collapse: collapse; margin: 20px 0; background-color: #f9fafb; border-radius: 6px; overflow: hidden;">
+                        <tr><td style="padding: 10px 14px; font-weight: 600; color: #4b5563; width: 150px; border-bottom: 1px solid #e5e7eb;">Employee Code:</td><td style="padding: 10px 14px; font-weight: 700; color: #111827; border-bottom: 1px solid #e5e7eb;">{WebUtility.HtmlEncode(employee.EmployeeCode)}</td></tr>
+                        <tr><td style="padding: 10px 14px; font-weight: 600; color: #4b5563; border-bottom: 1px solid #e5e7eb;">Login Email:</td><td style="padding: 10px 14px; color: #2563eb; font-weight: 600; border-bottom: 1px solid #e5e7eb;">{WebUtility.HtmlEncode(email)}</td></tr>
+                        <tr><td style="padding: 10px 14px; font-weight: 600; color: #4b5563; border-bottom: 1px solid #e5e7eb;">Password:</td><td style="padding: 10px 14px; font-family: monospace; color: #111827; border-bottom: 1px solid #e5e7eb;">{passwordDisplay}</td></tr>
+                        <tr><td style="padding: 10px 14px; font-weight: 600; color: #4b5563;">Job Title:</td><td style="padding: 10px 14px; color: #111827;">{WebUtility.HtmlEncode(request.JobTitle)}</td></tr>
+                    </table>
+                    <p style="margin: 28px 0;">
+                        <a href="{loginUrl}" style="background-color: #2563eb; color: #ffffff; padding: 12px 28px; text-decoration: none; border-radius: 6px; font-weight: 600; display: inline-block;">Sign In to HR Portal</a>
+                    </p>
+                    <p style="color: #6b7280; font-size: 13px; line-height: 1.4; margin-top: 24px; border-top: 1px solid #e5e7eb; padding-top: 16px;">
+                        If you have any questions, please reach out to your HR department.
+                    </p>
+                </div>
+                """;
+
+            await _emailSender.SendAsync(
+                new EmailMessage(email, $"Welcome to HR Portal - Onboarding Details ({employee.EmployeeCode})", body),
+                ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send onboarding welcome email to {Email}", email);
         }
 
         return await GetAsync(employee.Id, ct);
