@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, HostListener, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, HostListener, OnDestroy, OnInit, computed, effect, inject, signal } from '@angular/core';
 import { ActivatedRouteSnapshot, NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { ApiService } from '../core/api/api.service';
@@ -90,6 +90,30 @@ export class ShellComponent implements OnInit, OnDestroy {
   protected readonly companyLogo = computed(() => this.session.companyLogo() || null);
   protected readonly currentCompanyName = computed(() => this.user()?.companyName || this.selectedTenant().name);
 
+  protected resolveLogoUrl(url?: string | null): string {
+    if (!url) return 'assets/images/shape-logo.png';
+    const trimmed = url.trim();
+    if (!trimmed) return 'assets/images/shape-logo.png';
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('data:')) {
+      return trimmed;
+    }
+    if (trimmed.startsWith('/assets/') || trimmed.startsWith('assets/')) {
+      return trimmed.startsWith('/') ? trimmed.slice(1) : trimmed;
+    }
+    if (trimmed.startsWith('/uploads/')) {
+      const isDev = typeof window !== 'undefined' && window.location.port === '4200';
+      return isDev ? `http://localhost:5096${trimmed}` : trimmed;
+    }
+    return trimmed;
+  }
+
+  protected onLogoError(event: Event): void {
+    const target = event.target as HTMLImageElement;
+    if (target && !target.src.includes('assets/images/shape-logo.png')) {
+      target.src = 'assets/images/shape-logo.png';
+    }
+  }
+
   protected readonly backendNavItems = signal<any[]>([]);
 
   /** Sidebar sections dynamically generated per role */
@@ -173,7 +197,20 @@ export class ShellComponent implements OnInit, OnDestroy {
         queryParams = { tab: tabVal };
       }
 
-      let path = isEmp && rawRoute === '/dashboard' ? '/me/dashboard' : (isEmp && rawRoute === '/employee-profile' ? '/me/profile' : rawRoute);
+      const lowerRoute = rawRoute.toLowerCase().trim();
+      let path = rawRoute;
+
+      if (lowerRoute === '/dashboard' || lowerRoute === 'dashboard') {
+        path = isEmp ? '/me/dashboard' : '/dashboard';
+      } else if (
+        lowerRoute === '/profile' ||
+        lowerRoute === '/employee-profile' ||
+        lowerRoute.includes('emplyee') ||
+        lowerRoute.includes('profile')
+      ) {
+        path = isEmp ? '/me/profile' : '/employee-profile';
+      }
+
       const badge = i.title === 'Approvals' && count > 0 ? `${count}` : (i.badge || undefined);
 
       return {
@@ -312,6 +349,11 @@ export class ShellComponent implements OnInit, OnDestroy {
 
   constructor() {
     this.updateTitle();
+    effect(() => {
+      if (this.ui.navigationRefresh() > 0) {
+        this.loadUserNavigation();
+      }
+    });
   }
 
   ngOnInit(): void {

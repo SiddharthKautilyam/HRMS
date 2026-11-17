@@ -1014,7 +1014,7 @@ export interface SaveRolePermissionsRequest {
 
 export interface SaveKeyStoreRequest {
   id?: string | null;
-  keyGroupId: string;
+  keyGroupId?: string | null;
   key: string;
   value: string;
   subValue?: string | null;

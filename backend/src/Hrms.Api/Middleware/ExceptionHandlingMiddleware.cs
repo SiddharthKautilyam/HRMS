@@ -69,6 +69,8 @@ public sealed class ExceptionHandlingMiddleware
             Instance = context.Request.Path,
         };
 
+        problem.Extensions["message"] = title;
+
         if (errors is { Count: > 0 })
         {
             problem.Extensions["errors"] = errors;
