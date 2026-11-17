@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { forkJoin } from 'rxjs';
 import { ApiService } from '../../core/api/api.service';
 import { IconDirective } from '../../core/icons/icon.directive';
 import { SessionService } from '../../core/services/session.service';
@@ -49,7 +50,7 @@ interface Approval {
 
     <div>
       <div class="tabs">
-        <button class="tab-btn" [class.active]="tab() === 'all'" (click)="tab.set('all')">All ({{ allData().length }})</button>
+        <button class="tab-btn" [class.active]="tab() === 'all'" (click)="tab.set('all')">All ({{ combined().length }})</button>
         <button class="tab-btn" [class.active]="tab() === 'leave'" (click)="tab.set('leave')">Leave ({{ leaveData().length }})</button>
         <button class="tab-btn" [class.active]="tab() === 'ot'" (click)="tab.set('ot')">Overtime ({{ overtimeData().length }})</button>
         @if (canReg()) {
@@ -85,8 +86,8 @@ interface Approval {
                       </td>
                     </tr>
                   }
-                  @for (r of regData(); track r.n) {
-                    <tr [style.opacity]="decided().has(r.n + r.t) ? '.4' : '1'">
+                  @for (r of regData(); track r.apiId ?? r.n + r.date) {
+                    <tr>
                       <td>
                         <div class="table-avatar">
                           <div class="avatar-placeholder avatar-sm" style="background: var(--p-soft); color: var(--p)">{{ initials(r.n) }}</div>
@@ -147,8 +148,8 @@ interface Approval {
                       </td>
                     </tr>
                   }
-                  @for (r of currentRows(); track r.n + r.t) {
-                    <tr [style.opacity]="decided().has(r.n + r.t) ? '.4' : '1'">
+                  @for (r of currentRows(); track r.apiId ?? r.n + r.t + r.d) {
+                    <tr>
                       <td>
                         <div class="table-avatar">
                           <div class="avatar-placeholder avatar-sm" style="background: var(--p-soft); color: var(--p)">{{ initials(r.n) }}</div>
@@ -245,7 +246,6 @@ export class ApprovalsComponent implements OnInit {
   protected readonly canReg = signal(this.role === 'Super Admin' || this.role === 'Company Admin' || this.role === 'HR Manager');
 
   protected readonly tab = signal<'all' | 'leave' | 'ot' | 'reg'>('all');
-  protected readonly decided = signal<Set<string>>(new Set());
   protected readonly viewTarget = signal<Approval | null>(null);
 
   protected readonly allData = signal<Approval[]>([]);
@@ -292,7 +292,9 @@ export class ApprovalsComponent implements OnInit {
               n: r.employeeName,
               t: 'Regularization',
               type: 'reg' as const,
-              d: '',
+              d: [r.date, r.inTime && r.outTime ? `${r.inTime} – ${r.outTime}` : '', r.reason]
+                .filter((part) => !!part)
+                .join(' · '),
               sub: r.submittedLabel,
               p: 'Medium' as const,
               date: r.date,
@@ -317,6 +319,11 @@ export class ApprovalsComponent implements OnInit {
     return base;
   });
 
+  /** Leave and overtime from ApprovalRequests, plus pending regularizations. */
+  protected readonly combined = computed(() =>
+    this.canReg() ? [...this.allData(), ...this.regData()] : [...this.allData()],
+  );
+
   protected readonly currentRows = computed(() => {
     switch (this.tab()) {
       case 'leave':
@@ -324,7 +331,7 @@ export class ApprovalsComponent implements OnInit {
       case 'ot':
         return this.overtimeData();
       default:
-        return this.allData();
+        return this.combined();
     }
   });
 
@@ -348,13 +355,17 @@ export class ApprovalsComponent implements OnInit {
     ];
   }
 
-  private key(r: Approval): string {
-    return r.n + r.t;
+  private drop(r: Approval): void {
+    if (r.type === 'reg') {
+      this.regData.update((list) => list.filter((x) => x.apiId !== r.apiId));
+      return;
+    }
+    this.allData.update((list) => list.filter((x) => x.apiId !== r.apiId));
   }
 
   protected decide(r: Approval, approved: boolean): void {
     const finish = () => {
-      this.decided.update((set) => new Set(set).add(this.key(r)));
+      this.drop(r);
       this.toast.show(approved ? 'Approved!' : 'Rejected', approved ? 'success' : 'danger');
     };
 
@@ -391,16 +402,23 @@ export class ApprovalsComponent implements OnInit {
   }
 
   protected approveAll(): void {
-    this.api.approveAllApprovals().subscribe({
+    const regCalls = this.canReg()
+      ? this.regData()
+          .filter((r) => !!r.apiId)
+          .map((r) => this.api.approveRegularization(r.apiId!))
+      : [];
+
+    forkJoin([this.api.approveAllApprovals(), ...regCalls]).subscribe({
       next: () => {
-        this.decided.update((set) => {
-          const next = new Set(set);
-          [...this.allData(), ...this.regData()].forEach((r) => next.add(this.key(r)));
-          return next;
-        });
+        this.allData.set([]);
+        this.regData.set([]);
         this.toast.show('All approved!');
       },
-      error: (error) => this.toast.show(error?.error?.title ?? 'Could not approve all requests.', 'danger'),
+      error: (error) => {
+        this.toast.show(error?.error?.title ?? 'Could not approve all requests.', 'danger');
+        this.loadApprovals();
+        this.loadRegularizations();
+      },
     });
   }
 }

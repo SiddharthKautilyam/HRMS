@@ -1183,9 +1183,7 @@ export class SettingsComponent implements OnInit {
   }
 
   protected editRole(role: RoleItem): void {
-    const isHr = (this.currentRole() as string) === 'HR Manager' || (this.currentRole() as string) === 'HrManager';
-    const code = (role.code || '').toLowerCase().trim();
-    if (isHr && (code === 'companyadmin' || code === 'superadmin')) {
+    if (!this.isSuperOrCompanyAdmin() && this.isRestrictedAdminRole(role)) {
       this.toast.show('HR Managers do not have permission to edit Company Admin or Super Admin roles', 'danger');
       return;
     }
@@ -1250,9 +1248,7 @@ export class SettingsComponent implements OnInit {
   }
 
   protected deleteRole(role: RoleItem): void {
-    const isHr = (this.currentRole() as string) === 'HR Manager' || (this.currentRole() as string) === 'HrManager';
-    const code = (role.code || '').toLowerCase().trim();
-    if (isHr && (code === 'companyadmin' || code === 'superadmin')) {
+    if (!this.isSuperOrCompanyAdmin() && this.isRestrictedAdminRole(role)) {
       this.toast.show('HR Managers do not have permission to delete Company Admin or Super Admin roles', 'danger');
       return;
     }
