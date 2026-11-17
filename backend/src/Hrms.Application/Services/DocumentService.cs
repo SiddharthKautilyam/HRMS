@@ -46,8 +46,15 @@ public sealed class DocumentService : IDocumentService
         CancellationToken ct = default)
     {
         var documents = await _uow.Documents.SearchAsync(employeeId, search, type, status, ct);
+        if (employeeId.HasValue && employeeId.Value != Guid.Empty)
+        {
+            return documents
+                .Where(d => !d.IsCompanyDocument)
+                .Select(ToDto)
+                .ToList();
+        }
+
         return documents
-            .Where(d => !d.IsCompanyDocument)
             .Select(ToDto)
             .ToList();
     }

@@ -364,6 +364,15 @@ export class ApiService {
     return this.http.post<DocumentDto>(this.url('/documents'), body);
   }
 
+  uploadFile(file: File): Observable<{ fileName: string; storedName: string; url: string; size: string }> {
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+    return this.http.post<{ fileName: string; storedName: string; url: string; size: string }>(
+      this.url('/files/upload'),
+      formData
+    );
+  }
+
   deleteDocument(id: string): Observable<void> {
     return this.http.delete<void>(this.url(`/documents/${id}`));
   }
